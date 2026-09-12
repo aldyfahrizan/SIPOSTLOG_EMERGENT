@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.production
+*.key.json
+secrets.json
+.DS_Store
