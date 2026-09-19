@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, MapPin, Truck, Boxes, Flame } from "lucide-react";
+import { Download, MapPin, Truck, Boxes, Flame, FileText } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { api, downloadFile } from "../lib/api";
@@ -13,7 +13,7 @@ const TT = { background: "#0F172A", border: "1px solid #334155", borderRadius: 8
 export default function DistributionDashboard() {
   const [range, setRange] = useState({ start: todayYMD(-29), end: todayYMD() });
   const [data, setData] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
 
   useEffect(() => {
     if (!range.start || !range.end) return;
@@ -21,16 +21,19 @@ export default function DistributionDashboard() {
     api.get("/dashboard/distribution", { params: range }).then((r) => setData(r.data)).catch((e) => toast.error(e.response?.data?.detail || "Gagal memuat"));
   }, [range]);
 
-  const exportXlsx = async () => {
-    setBusy(true);
-    try { const n = await downloadFile(`/export/distribution?start=${range.start}&end=${range.end}`, "penyaluran.xlsx"); toast.success(`Berkas ${n} diunduh`); }
-    catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  const exportFile = async (key, path, name) => {
+    setBusy(key);
+    try { const n = await downloadFile(path, name); toast.success(`Berkas ${n} diunduh`); }
+    catch (e) { toast.error(e.message); } finally { setBusy(""); }
   };
 
   return (
     <div data-testid="distribution-dashboard">
       <PageHeader eyebrow="Dashboard Internal" title="Dashboard Penyaluran" description="Rekapitulasi penyaluran logistik ke posko dan wilayah terdampak. Data ini hanya tersedia bagi petugas dan tidak ditampilkan ke publik."
-        actions={<button onClick={exportXlsx} disabled={busy} className="btn-primary" data-testid="distribution-export-button"><Download size={14} /> Ekspor Excel</button>} />
+        actions={<>
+          <button onClick={() => exportFile("pdf", `/export/distribution/pdf?start=${range.start}&end=${range.end}`, "penyaluran.pdf")} disabled={!!busy} className="btn-ghost" data-testid="distribution-export-pdf-button"><FileText size={14} /> {busy === "pdf" ? "Mencetak…" : "Cetak PDF"}</button>
+          <button onClick={() => exportFile("xlsx", `/export/distribution?start=${range.start}&end=${range.end}`, "penyaluran.xlsx")} disabled={!!busy} className="btn-primary" data-testid="distribution-export-button"><Download size={14} /> Ekspor Excel</button>
+        </>} />
       <div className="mb-6"><DateRangePicker value={range} onChange={setRange} /></div>
 
       {!data ? <Spinner /> : (

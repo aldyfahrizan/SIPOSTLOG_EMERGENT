@@ -22,7 +22,8 @@ from auth import (
     ROLE_ADMIN, ROLE_PENDING, ROLE_PETUGAS, exchange_session, get_current_user, logout as do_logout, require_role,
 )
 from excel_utils import build_opname_template, build_workbook, parse_opname_upload
-from seed_data import EXPECTED_ITEM_COUNT, INCIDENT_TYPES, INITIAL_ITEMS, SAMPLE_DISTRIBUTIONS
+from pdf_utils import build_pdf_report
+from seed_data import CATALOG_VERSION, DESTINATION_CYCLE, EXPECTED_ITEM_COUNT, INCIDENT_TYPES, INITIAL_ITEMS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sipostlog")
@@ -252,9 +253,14 @@ async def auth_logout(request: Request, response: Response):
 
 # ---------- items (staff) ----------
 @api.get("/items")
-async def list_items(user=Depends(require_role(*STAFF))):
+async def list_items(year: str = "2026", user=Depends(require_role(*STAFF))):
     items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
-    return [{**clean(i), "status": stock_status(i)} for i in items]
+    if year == "2027":
+        return [
+            {**clean(i), "status": "rencana" if i["planYear"].get("2027", 0) > 0 else "tidak-dianggarkan", "planQuantity": i["planYear"].get("2027", 0)}
+            for i in items
+        ]
+    return [{**clean(i), "status": stock_status(i), "planQuantity": i["planYear"].get("2026", 0)} for i in items]
 
 
 @api.get("/meta/incident-types")
@@ -281,8 +287,31 @@ async def patch_item(item_id: str, body: ItemPatch, user=Depends(require_role(RO
 
 # ---------- dashboards ----------
 @api.get("/dashboard/stock")
-async def dashboard_stock(user=Depends(require_role(*STAFF))):
+async def dashboard_stock(year: str = "2026", user=Depends(require_role(*STAFF))):
     items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
+
+    if year == "2027":
+        categories = {}
+        rencana = tidak = 0
+        rows = []
+        for i in items:
+            plan = i["planYear"].get("2027", 0)
+            st = "rencana" if plan > 0 else "tidak-dianggarkan"
+            rencana += st == "rencana"
+            tidak += st == "tidak-dianggarkan"
+            c = categories.setdefault(i["category"], {"category": i["category"], "count": 0, "low": 0})
+            c["count"] += 1
+            rows.append({**clean(i), "status": st, "planQuantity": plan})
+        return {
+            "year": "2027",
+            "realized": False,
+            "total_items": len(items),
+            "status_counts": {"rencana": rencana, "tidak-dianggarkan": tidak},
+            "categories": sorted(categories.values(), key=lambda c: -c["count"]),
+            "items": rows,
+            "total_planned_quantity": sum(r["planQuantity"] for r in rows),
+        }
+
     categories = {}
     for i in items:
         c = categories.setdefault(i["category"], {"category": i["category"], "count": 0, "low": 0})
@@ -296,14 +325,24 @@ async def dashboard_stock(user=Depends(require_role(*STAFF))):
     async for tx in db.transactions.find({"created_at": {"$gte": since}}, {"type": 1}):
         weekly[tx["type"]] = weekly.get(tx["type"], 0) + 1
     return {
+        "year": "2026",
+        "realized": True,
         "total_items": len(items),
         "status_counts": {s: sum(1 for i in items if stock_status(i) == s) for s in ("aman", "menipis", "habis")},
         "categories": sorted(categories.values(), key=lambda c: -c["count"]),
         "low_items": low_items,
-        "items": [{**clean(i), "status": stock_status(i)} for i in items],
+        "items": [{**clean(i), "status": stock_status(i), "planQuantity": i["planYear"].get("2026", 0)} for i in items],
         "recent_transactions": clean(recent),
         "weekly_activity": weekly,
     }
+
+
+@api.get("/items/{item_id}/history-chart")
+async def item_history_chart(item_id: str, user=Depends(require_role(*STAFF))):
+    item = await get_item_or_404(item_id)
+    txs = await db.transactions.find({"item_id": item_id}, {"_id": 0}).sort("occurred_at", 1).to_list(500)
+    points = [{"date": clean(t["occurred_at"]), "stock": t["new_quantity"], "type": t["type"]} for t in txs]
+    return {"item_id": item_id, "item_name": item["name"], "unit": item["unit"], "points": points}
 
 
 @api.get("/dashboard/distribution")
@@ -406,6 +445,18 @@ STATUS_LABEL = {"aman": "Aman", "menipis": "Menipis", "habis": "Habis"}
 TYPE_LABEL = {"IN": "Barang Masuk", "OUT": "Penyaluran", "ADJUSTMENT": "Koreksi"}
 
 
+def pdf_response(content: bytes, filename: str):
+    return RawResponse(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+def now_wita():
+    return datetime.now(timezone(timedelta(hours=8))).strftime("%d/%m/%Y %H:%M WITA")
+
+
 @api.get("/export/stock")
 async def export_stock(user=Depends(require_role(*STAFF))):
     items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
@@ -413,17 +464,34 @@ async def export_stock(user=Depends(require_role(*STAFF))):
     content = build_workbook([{
         "name": "Laporan Stok",
         "title": "Laporan Stok Logistik",
-        "meta": [("Dicetak", datetime.now(timezone(timedelta(hours=8))).strftime("%d/%m/%Y %H:%M WITA")), ("Oleh", user["name"] or user["email"]), ("Jumlah Item", len(items))],
+        "meta": [("Dicetak", now_wita()), ("Oleh", user["name"] or user["email"]), ("Jumlah Item", len(items))],
         "headers": ["ID", "Nama Item", "Kategori", "Stok", "Satuan", "Ambang Minimum", "Status", "Pembaruan Terakhir"],
         "rows": rows,
     }])
     return xlsx_response(content, f"SIPOSTLOG_Laporan_Stok_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
 
+@api.get("/export/stock/pdf")
+async def export_stock_pdf(user=Depends(require_role(*STAFF))):
+    items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
+    rows = [[i["id"], i["name"], i["category"], f'{i["currentStock"]:,}'.replace(",", "."), i["unit"], f'{i["minThreshold"]:,}'.replace(",", "."), STATUS_LABEL[stock_status(i)]] for i in items]
+    content = build_pdf_report(
+        "LAPORAN STOK LOGISTIK BENCANA",
+        [{
+            "title": "Rekapitulasi Posisi Stok",
+            "meta": [("Dicetak", now_wita()), ("Jumlah Item", str(len(items)))],
+            "headers": ["ID", "Nama Item", "Kategori", "Stok", "Satuan", "Ambang Min.", "Status"],
+            "rows": rows,
+        }],
+        user["name"] or user["email"],
+    )
+    return pdf_response(content, f"SIPOSTLOG_Laporan_Stok_{datetime.now().strftime('%Y%m%d')}.pdf")
+
+
 @api.get("/export/distribution")
 async def export_distribution(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     data = await dashboard_distribution(start, end, user)
-    meta = [("Periode", f"{data['range']['start']} s/d {data['range']['end']}"), ("Dicetak", datetime.now(timezone(timedelta(hours=8))).strftime("%d/%m/%Y %H:%M WITA")), ("Oleh", user["name"] or user["email"])]
+    meta = [("Periode", f"{data['range']['start']} s/d {data['range']['end']}"), ("Dicetak", now_wita()), ("Oleh", user["name"] or user["email"])]
     txs = await db.transactions.find({"type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
     content = build_workbook([
         {"name": "Per Item", "title": "Laporan Penyaluran per Item", "meta": meta,
@@ -439,6 +507,26 @@ async def export_distribution(start: Optional[str] = None, end: Optional[str] = 
     return xlsx_response(content, f"SIPOSTLOG_Laporan_Penyaluran_{data['range']['start']}_{data['range']['end']}.xlsx")
 
 
+@api.get("/export/distribution/pdf")
+async def export_distribution_pdf(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
+    data = await dashboard_distribution(start, end, user)
+    meta = [("Periode", f"{data['range']['start']} s/d {data['range']['end']}"), ("Dicetak", now_wita())]
+    txs = await db.transactions.find({"type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
+    content = build_pdf_report(
+        "LAPORAN PENYALURAN LOGISTIK BENCANA",
+        [
+            {"title": "Rekap per Item", "meta": meta, "headers": ["Nama Item", "Kategori", "Total Disalurkan", "Satuan", "Jml Transaksi"],
+             "rows": [[p["name"], p["category"], p["quantity"], p["unit"], p["count"]] for p in data["per_item"]]},
+            {"title": "Rekap per Tujuan", "meta": meta, "headers": ["Tujuan", "Nama Item", "Total Disalurkan", "Satuan"],
+             "rows": [[d["destination"], it["name"], it["quantity"], it["unit"]] for d in data["per_destination"] for it in d["items"]]},
+            {"title": "Rincian Transaksi", "meta": meta, "headers": ["Waktu", "Nama Item", "Jumlah", "Satuan", "Tujuan", "Kejadian", "Petugas"],
+             "rows": [[fmt_dt(t["occurred_at"]), t["item_name"], -t["change_quantity"], t["unit"], t.get("destination", ""), t.get("incident_type", ""), t["user_name"]] for t in txs]},
+        ],
+        user["name"] or user["email"],
+    )
+    return pdf_response(content, f"SIPOSTLOG_Laporan_Penyaluran_{data['range']['start']}_{data['range']['end']}.pdf")
+
+
 @api.get("/export/transactions")
 async def export_transactions(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     start_dt, end_dt = date_range(start, end)
@@ -447,11 +535,30 @@ async def export_transactions(start: Optional[str] = None, end: Optional[str] = 
              t.get("source") or t.get("destination") or "", t.get("incident_type", ""), t.get("reason", ""), t["user_name"], t.get("notes", "")] for t in txs]
     content = build_workbook([{
         "name": "Riwayat Transaksi", "title": "Riwayat Transaksi Stok",
-        "meta": [("Periode", f"{start_dt.strftime('%Y-%m-%d')} s/d {(end_dt - timedelta(days=1)).strftime('%Y-%m-%d')}"), ("Dicetak", datetime.now(timezone(timedelta(hours=8))).strftime("%d/%m/%Y %H:%M WITA")), ("Oleh", user["name"] or user["email"])],
+        "meta": [("Periode", f"{start_dt.strftime('%Y-%m-%d')} s/d {(end_dt - timedelta(days=1)).strftime('%Y-%m-%d')}"), ("Dicetak", now_wita()), ("Oleh", user["name"] or user["email"])],
         "headers": ["Waktu", "Jenis", "Nama Item", "Stok Sebelum", "Stok Sesudah", "Perubahan", "Satuan", "Sumber / Tujuan", "Jenis Kejadian", "Alasan", "Petugas", "Catatan"],
         "rows": rows,
     }])
     return xlsx_response(content, f"SIPOSTLOG_Riwayat_{start_dt.strftime('%Y%m%d')}_{(end_dt - timedelta(days=1)).strftime('%Y%m%d')}.xlsx")
+
+
+@api.get("/export/transactions/pdf")
+async def export_transactions_pdf(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
+    start_dt, end_dt = date_range(start, end)
+    txs = await db.transactions.find({"occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}).sort("occurred_at", -1).to_list(10000)
+    rows = [[fmt_dt(t["occurred_at"]), TYPE_LABEL.get(t["type"], t["type"]), t["item_name"], t["previous_quantity"], t["new_quantity"],
+             t["change_quantity"], t["unit"], t.get("source") or t.get("destination") or "", t["user_name"]] for t in txs]
+    content = build_pdf_report(
+        "RIWAYAT TRANSAKSI STOK LOGISTIK",
+        [{
+            "title": "Rincian Mutasi Stok",
+            "meta": [("Periode", f"{start_dt.strftime('%Y-%m-%d')} s/d {(end_dt - timedelta(days=1)).strftime('%Y-%m-%d')}"), ("Dicetak", now_wita())],
+            "headers": ["Waktu", "Jenis", "Nama Item", "Sebelum", "Sesudah", "Perubahan", "Satuan", "Sumber/Tujuan", "Petugas"],
+            "rows": rows,
+        }],
+        user["name"] or user["email"],
+    )
+    return pdf_response(content, f"SIPOSTLOG_Riwayat_{start_dt.strftime('%Y%m%d')}_{(end_dt - timedelta(days=1)).strftime('%Y%m%d')}.pdf")
 
 
 @api.get("/excel/template")
@@ -529,6 +636,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",")],
+    allow_origin_regex=r"^https://[a-z0-9-]+\.(preview\.emergentagent\.com|cluster-\d+\.preview\.emergentcf\.cloud)$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -536,6 +644,37 @@ app.add_middleware(
 
 # ---------- startup ----------
 SYSTEM_USER = {"user_id": "system", "name": "Sistem (data contoh)", "email": "system@sipostlog", "role": "admin"}
+
+
+async def seed_2026_history():
+    """Simulate 2026 realization: full procurement in, then depletion to the real opname baseline."""
+    for idx, item in enumerate(INITIAL_ITEMS):
+        plan = item["planYear"].get("2026", 0)
+        target = item["currentStock"]
+        if plan <= 0:
+            continue
+        await db.items.update_one({"id": item["id"]}, {"$set": {"currentStock": 0}})
+        in_date = now_utc() - timedelta(days=200 - (idx % 15))
+        await apply_stock_in(item["id"], plan, SYSTEM_USER, in_date, "Pengadaan APBD 2026", "Realisasi pengadaan awal tahun anggaran 2026")
+        out_qty = plan - target
+        if out_qty <= 0:
+            continue
+        dest = DESTINATION_CYCLE[idx % len(DESTINATION_CYCLE)]
+        inc = INCIDENT_TYPES[idx % len(INCIDENT_TYPES)]
+        if out_qty > 4:
+            half = out_qty // 2
+            d1 = now_utc() - timedelta(days=140 - (idx % 20))
+            d2 = now_utc() - timedelta(days=50 - (idx % 15))
+            await apply_stock_out(item["id"], half, SYSTEM_USER, d1, dest, inc, "Distribusi bantuan bencana 2026")
+            await apply_stock_out(
+                item["id"], out_qty - half, SYSTEM_USER, d2,
+                DESTINATION_CYCLE[(idx + 1) % len(DESTINATION_CYCLE)], INCIDENT_TYPES[(idx + 1) % len(INCIDENT_TYPES)],
+                "Distribusi bantuan bencana 2026",
+            )
+        else:
+            d1 = now_utc() - timedelta(days=90 - (idx % 10))
+            await apply_stock_out(item["id"], out_qty, SYSTEM_USER, d1, dest, inc, "Distribusi bantuan bencana 2026")
+    logger.info("Seeded 2026 realization history")
 
 
 @app.on_event("startup")
@@ -548,6 +687,13 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
 
+    version_doc = await db.meta.find_one({"key": "catalog_version"})
+    if not version_doc or version_doc.get("value") != CATALOG_VERSION:
+        await db.items.delete_many({})
+        await db.transactions.delete_many({})
+        await db.meta.delete_many({"key": {"$in": ["sample_seeded", "catalog_version"]}})
+        logger.info("Katalog item berubah, menata ulang data item & transaksi")
+
     if await db.items.count_documents({}) == 0:
         ts = now_utc()
         await db.items.insert_many([{**i, "lastUpdated": ts} for i in INITIAL_ITEMS])
@@ -557,11 +703,9 @@ async def startup():
         raise RuntimeError(f"Data integrity violation: expected {EXPECTED_ITEM_COUNT} items in DB, got {count}")
 
     if not await db.meta.find_one({"key": "sample_seeded"}) and await db.transactions.count_documents({}) == 0:
-        for s in SAMPLE_DISTRIBUTIONS:
-            occurred = now_utc() - timedelta(days=s["days_ago"])
-            await apply_stock_out(s["item_id"], s["quantity"], SYSTEM_USER, occurred, s["destination"], s["incident_type"], "Data contoh awal")
+        await seed_2026_history()
         await db.meta.insert_one({"key": "sample_seeded", "at": now_utc()})
-        logger.info("Seeded sample distributions")
+    await db.meta.update_one({"key": "catalog_version"}, {"$set": {"value": CATALOG_VERSION}}, upsert=True)
 
 
 @app.on_event("shutdown")

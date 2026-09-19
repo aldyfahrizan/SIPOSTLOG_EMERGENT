@@ -1,33 +1,61 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, Package, Search } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, Package, Search, TrendingUp } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../lib/api";
 import StatCard, { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
 import { StatusBadge, TypeBadge } from "../components/StatusBadge";
+import Plan2027View from "../components/Plan2027View";
+import ItemTrendModal from "../components/ItemTrendModal";
 import { fmtDateTime, fmtNum } from "../lib/format";
 
 const PALETTE = ["#F59E0B", "#38BDF8", "#34D399", "#F472B6", "#A78BFA", "#FB923C", "#22D3EE", "#E879F9", "#84CC16", "#F87171", "#94A3B8"];
 
+function YearToggle({ year, onChange }) {
+  return (
+    <div className="inline-flex rounded-full border border-ink-700 bg-ink-900/60 p-1" data-testid="year-toggle">
+      {["2026", "2027"].map((y) => (
+        <button key={y} onClick={() => onChange(y)} data-testid={`year-toggle-${y}`}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${year === y ? "bg-amber-brand text-ink-900" : "text-slate-300 hover:text-white"}`}>
+          Tahun {y}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function StockDashboard() {
+  const [year, setYear] = useState("2026");
   const [data, setData] = useState(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("semua");
+  const [trendItem, setTrendItem] = useState(null);
 
-  useEffect(() => { api.get("/dashboard/stock").then((r) => setData(r.data)).catch(() => {}); }, []);
+  useEffect(() => { setData(null); api.get("/dashboard/stock", { params: { year } }).then((r) => setData(r.data)).catch(() => {}); }, [year]);
 
   const rows = useMemo(() => (data?.items || []).filter((i) => (filter === "semua" || i.status === filter) && i.name.toLowerCase().includes(q.toLowerCase())), [data, q, filter]);
 
   if (!data) return <Spinner />;
+
+  if (year === "2027") {
+    return (
+      <div data-testid="stock-dashboard">
+        <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description="Posisi stok riil 37 item logistik beserta satuan aslinya. Satuan berbeda tidak pernah dijumlahkan menjadi satu total."
+          actions={<YearToggle year={year} onChange={setYear} />} />
+        <Plan2027View data={data} />
+      </div>
+    );
+  }
+
   const low = data.status_counts.menipis + data.status_counts.habis;
 
   return (
     <div data-testid="stock-dashboard">
-      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description="Posisi stok riil 33 item logistik beserta satuan aslinya. Satuan berbeda tidak pernah dijumlahkan menjadi satu total."
-        actions={<><Link to="/app/barang-masuk" className="btn-ghost" data-testid="quick-stock-in"><ArrowDownToLine size={14} /> Barang Masuk</Link><Link to="/app/catat-penyaluran" className="btn-primary" data-testid="quick-stock-out"><ArrowUpFromLine size={14} /> Catat Penyaluran</Link></>} />
+      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description="Posisi stok riil 37 item logistik beserta satuan aslinya. Satuan berbeda tidak pernah dijumlahkan menjadi satu total."
+        actions={<><YearToggle year={year} onChange={setYear} /><Link to="/app/barang-masuk" className="btn-ghost" data-testid="quick-stock-in"><ArrowDownToLine size={14} /> Barang Masuk</Link><Link to="/app/catat-penyaluran" className="btn-primary" data-testid="quick-stock-out"><ArrowUpFromLine size={14} /> Catat Penyaluran</Link></>} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger">
-        <StatCard testId="stat-total-items" label="Jenis Item" value={data.total_items} sub="validasi wajib 33 item" accent="slate" icon={Package} />
+        <StatCard testId="stat-total-items" label="Jenis Item" value={data.total_items} sub="validasi wajib 37 item" accent="slate" icon={Package} />
         <StatCard testId="stat-safe-items" label="Aman" value={data.status_counts.aman} sub="di atas ambang minimum" accent="green" />
         <StatCard testId="stat-low-items" label="Menipis / Habis" value={low} sub="perlu tindak lanjut" accent={low ? "red" : "green"} icon={AlertTriangle} />
         <StatCard testId="stat-weekly-activity" label="Transaksi 7 Hari" value={data.weekly_activity.IN + data.weekly_activity.OUT + data.weekly_activity.ADJUSTMENT} sub={`${data.weekly_activity.IN} masuk · ${data.weekly_activity.OUT} salur · ${data.weekly_activity.ADJUSTMENT} koreksi`} accent="blue" icon={ClipboardCheck} />
@@ -64,21 +92,22 @@ export default function StockDashboard() {
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.6fr_1fr]">
-        <Panel title="Daftar Stok" subtitle={`${rows.length} dari ${data.total_items} item`} testId="panel-stock-table"
+        <Panel title="Daftar Stok" subtitle={`${rows.length} dari ${data.total_items} item · klik baris untuk lihat tren`} testId="panel-stock-table"
           actions={<div className="flex gap-2"><select value={filter} onChange={(e) => setFilter(e.target.value)} className="field !w-auto !py-1.5 text-xs" data-testid="stock-status-filter"><option value="semua">Semua</option><option value="aman">Aman</option><option value="menipis">Menipis</option><option value="habis">Habis</option></select>
             <label className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari…" className="field !w-40 !py-1.5 !pl-8 text-xs" data-testid="stock-search-input" /></label></div>}>
           <div className="overflow-x-auto scrollbar-thin -mx-2">
             <table className="tbl">
-              <thead><tr><th>Item</th><th>Kategori</th><th className="text-right">Stok</th><th className="text-right">Ambang</th><th>Status</th><th>Diperbarui</th></tr></thead>
+              <thead><tr><th>Item</th><th>Kategori</th><th className="text-right">Stok</th><th className="text-right">Ambang</th><th>Status</th><th>Diperbarui</th><th></th></tr></thead>
               <tbody>
                 {rows.map((i) => (
-                  <tr key={i.id} data-testid={`stock-row-${i.id}`}>
+                  <tr key={i.id} data-testid={`stock-row-${i.id}`} onClick={() => setTrendItem(i.id)} className="cursor-pointer">
                     <td><div className="font-semibold text-white">{i.name}</div><div className="text-[11px] text-slate-500 font-mono">{i.id}</div></td>
                     <td className="text-slate-400 text-xs">{i.category}</td>
                     <td className="text-right num font-bold text-white" data-testid={`stock-qty-${i.id}`}>{fmtNum(i.currentStock)} <span className="text-slate-500 text-xs font-normal">{i.unit}</span></td>
                     <td className="text-right num text-slate-400">{fmtNum(i.minThreshold)}</td>
                     <td><StatusBadge status={i.status} /></td>
                     <td className="text-xs text-slate-500 whitespace-nowrap">{fmtDateTime(i.lastUpdated)}</td>
+                    <td className="text-right"><TrendingUp size={14} className="text-slate-500" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -101,6 +130,7 @@ export default function StockDashboard() {
           )}
         </Panel>
       </div>
+      <ItemTrendModal itemId={trendItem} onClose={() => setTrendItem(null)} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { api, downloadFile } from "../lib/api";
 import { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
@@ -14,7 +14,7 @@ export default function HistoryPage() {
   const [type, setType] = useState("");
   const [itemId, setItemId] = useState("");
   const [rows, setRows] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
 
   useEffect(() => {
     if (!range.start || !range.end) return;
@@ -22,16 +22,19 @@ export default function HistoryPage() {
     api.get("/transactions", { params: { ...range, type: type || undefined, item_id: itemId || undefined, limit: 500 } }).then((r) => setRows(r.data)).catch((e) => toast.error(e.response?.data?.detail || "Gagal memuat"));
   }, [range, type, itemId]);
 
-  const exportXlsx = async () => {
-    setBusy(true);
-    try { const n = await downloadFile(`/export/transactions?start=${range.start}&end=${range.end}`, "riwayat.xlsx"); toast.success(`Berkas ${n} diunduh`); }
-    catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  const exportFile = async (key, path, name) => {
+    setBusy(key);
+    try { const n = await downloadFile(path, name); toast.success(`Berkas ${n} diunduh`); }
+    catch (e) { toast.error(e.message); } finally { setBusy(""); }
   };
 
   return (
     <div data-testid="history-page">
       <PageHeader eyebrow="Audit Trail" title="Riwayat Transaksi" description="Seluruh perubahan stok tercatat permanen: waktu, jenis, item, stok sebelum → sesudah, petugas, dan alasan. Tidak dapat diubah atau dihapus."
-        actions={<button onClick={exportXlsx} disabled={busy} className="btn-primary" data-testid="history-export-button"><Download size={14} /> Ekspor Excel</button>} />
+        actions={<>
+          <button onClick={() => exportFile("pdf", `/export/transactions/pdf?start=${range.start}&end=${range.end}`, "riwayat.pdf")} disabled={!!busy} className="btn-ghost" data-testid="history-export-pdf-button"><FileText size={14} /> {busy === "pdf" ? "Mencetak…" : "Cetak PDF"}</button>
+          <button onClick={() => exportFile("xlsx", `/export/transactions?start=${range.start}&end=${range.end}`, "riwayat.xlsx")} disabled={!!busy} className="btn-primary" data-testid="history-export-button"><Download size={14} /> Ekspor Excel</button>
+        </>} />
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <DateRangePicker value={range} onChange={setRange} />
         <select value={type} onChange={(e) => setType(e.target.value)} className="field !w-auto !py-1.5 text-xs" data-testid="history-type-filter"><option value="">Semua jenis</option><option value="IN">Barang Masuk</option><option value="OUT">Penyaluran</option><option value="ADJUSTMENT">Koreksi</option></select>

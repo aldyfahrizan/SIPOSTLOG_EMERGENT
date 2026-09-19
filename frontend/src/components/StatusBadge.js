@@ -4,19 +4,23 @@ const STATUS_STYLE = {
   aman: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   menipis: "bg-amber-500/15 text-amber-400 border-amber-500/30",
   habis: "bg-red-500/15 text-red-400 border-red-500/30",
+  rencana: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  "tidak-dianggarkan": "bg-slate-500/15 text-slate-400 border-slate-500/30",
 };
 const STATUS_STYLE_LIGHT = {
   aman: "bg-emerald-50 text-emerald-700 border-emerald-200",
   menipis: "bg-amber-50 text-amber-700 border-amber-300",
   habis: "bg-red-50 text-red-700 border-red-200",
+  rencana: "bg-sky-50 text-sky-700 border-sky-200",
+  "tidak-dianggarkan": "bg-slate-100 text-slate-600 border-slate-200",
 };
-const DOT = { aman: "bg-emerald-400", menipis: "bg-amber-400", habis: "bg-red-500" };
+const DOT = { aman: "bg-emerald-400", menipis: "bg-amber-400", habis: "bg-red-500", rencana: "bg-sky-400", "tidak-dianggarkan": "bg-slate-400" };
 
 export function StatusBadge({ status, light = false, testId }) {
   const style = (light ? STATUS_STYLE_LIGHT : STATUS_STYLE)[status] || "";
   return (
     <span data-testid={testId} data-status={status} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${style}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]} ${status !== "aman" ? "animate-pulseDot" : ""}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${DOT[status]} ${status === "habis" || status === "menipis" ? "animate-pulseDot" : ""}`} />
       {STATUS_LABEL[status] || status}
     </span>
   );

@@ -1,10 +1,76 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { LogIn, Search, ShieldAlert, Boxes, CheckCircle2, Clock3 } from "lucide-react";
+import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { api } from "../lib/api";
 import { Brand, Logos } from "../components/Logos";
 import { StatusBadge } from "../components/StatusBadge";
 import { fmtDateTime } from "../lib/format";
+
+function useCountUp(target, duration = 1200) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (target == null) return;
+    let raf, start;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      setVal(target * p);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return val;
+}
+
+function CountUp({ value }) {
+  const n = useCountUp(typeof value === "number" ? value : null);
+  if (typeof value !== "number") return value;
+  return Math.round(n);
+}
+
+function ReadinessGauge({ score }) {
+  const animated = useCountUp(score, 1400);
+  const color = score >= 70 ? "#34D399" : score >= 30 ? "#F59E0B" : "#F87171";
+  return (
+    <div className="relative h-52 w-52 sm:h-60 sm:w-60 shrink-0" data-testid="public-readiness-gauge">
+      <ResponsiveContainer>
+        <RadialBarChart innerRadius="72%" outerRadius="100%" data={[{ value: animated, fill: color }]} startAngle={90} endAngle={-270} barSize={14}>
+          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+          <RadialBar background={{ fill: "rgba(255,255,255,0.08)" }} dataKey="value" cornerRadius={20} isAnimationActive={false} />
+        </RadialBarChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="num text-4xl sm:text-5xl font-extrabold text-white leading-none" data-testid="public-readiness-score">{Math.round(animated)}%</div>
+        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 text-center px-4">Indeks Ketersediaan Logistik</div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBar({ counts, total }) {
+  const [play, setPlay] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setPlay(true), 150); return () => clearTimeout(t); }, [counts]);
+  const pct = (n) => (total ? (n / total) * 100 : 0);
+  const segs = [
+    { key: "aman", cls: "bg-emerald-400" },
+    { key: "menipis", cls: "bg-amber-400" },
+    { key: "habis", cls: "bg-red-500" },
+  ];
+  return (
+    <div className="mt-6" data-testid="public-status-bar">
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 flex">
+        {segs.map((s) => <div key={s.key} className={`h-full ${s.cls} transition-[width] duration-[1400ms] ease-out`} style={{ width: `${play ? pct(counts[s.key]) : 0}%` }} />)}
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-400">
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Aman {counts.aman}</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" /> Menipis {counts.menipis}</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" /> Habis {counts.habis}</span>
+      </div>
+    </div>
+  );
+}
 
 function SummaryTile({ label, value, sub, icon: Icon, tone, testId }) {
   const tones = {
@@ -14,12 +80,12 @@ function SummaryTile({ label, value, sub, icon: Icon, tone, testId }) {
     dark: "bg-ink-900 border-ink-800 text-white",
   };
   return (
-    <div data-testid={testId} className={`rounded-2xl border p-5 shadow-card ${tones[tone]}`}>
+    <div data-testid={testId} className={`rounded-2xl border p-5 shadow-card hover:-translate-y-0.5 transition-transform duration-200 ${tones[tone]}`}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-[0.16em] opacity-70">{label}</span>
         <Icon size={18} className="opacity-70" />
       </div>
-      <div className="num mt-3 text-4xl font-extrabold leading-none">{value}</div>
+      <div className="num mt-3 text-4xl font-extrabold leading-none"><CountUp value={value} /></div>
       {sub && <div className="mt-2 text-xs opacity-75">{sub}</div>}
     </div>
   );
@@ -46,6 +112,7 @@ export default function PublicPage() {
   ), [items, category, status, query]);
 
   const low = (summary?.status_counts.menipis || 0) + (summary?.status_counts.habis || 0);
+  const score = summary ? Math.round((summary.status_counts.aman / summary.total_items) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-paper text-ink-900">
@@ -58,17 +125,24 @@ export default function PublicPage() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_left,rgba(245,158,11,0.18),transparent_55%)]" />
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 pb-10 grid lg:grid-cols-[1.4fr_1fr] gap-10 items-end">
+      <section className="relative overflow-hidden bg-ink-900 grain">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,rgba(245,158,11,0.22),transparent_55%)]" />
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-14 pb-14 grid lg:grid-cols-[1.3fr_auto] gap-10 items-center">
           <div className="animate-rise">
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">Status Kesiapan <span className="text-amber-600">Logistik Bencana</span> Kabupaten Banjar</h1>
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300" data-testid="public-live-badge">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulseDot" /> Data Live
+            </div>
+            <h1 className="mt-4 text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05] text-white">Status Kesiapan <span className="text-amber-brand">Logistik Bencana</span> Kabupaten Banjar</h1>
+            {summary && <StatusBar counts={summary.status_counts} total={summary.total_items} />}
+            <div className="mt-7 hidden sm:flex"><Logos size={44} /></div>
           </div>
-          <div className="hidden lg:flex justify-end"><Logos size={140} /></div>
+          <div className="flex justify-center lg:justify-end animate-rise" style={{ animationDelay: "120ms" }}>
+            <ReadinessGauge score={score} />
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 sm:px-6">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 pt-8">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger">
           <SummaryTile testId="public-summary-total-items" label="Jenis Item" value={summary?.total_items ?? "—"} sub="logistik terdaftar" icon={Boxes} tone="slate" />
           <SummaryTile testId="public-summary-safe-items" label="Status Aman" value={summary?.status_counts.aman ?? "—"} sub="item di atas ambang" icon={CheckCircle2} tone="green" />

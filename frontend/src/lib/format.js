@@ -1,4 +1,4 @@
-export const STATUS_LABEL = { aman: "Aman", menipis: "Menipis", habis: "Habis" };
+export const STATUS_LABEL = { aman: "Aman", menipis: "Menipis", habis: "Habis", rencana: "Rencana", "tidak-dianggarkan": "Tidak Dianggarkan" };
 export const TYPE_LABEL = { IN: "Barang Masuk", OUT: "Penyaluran", ADJUSTMENT: "Koreksi" };
 export const ROLE_LABEL = { admin: "Admin", petugas: "Petugas", pending: "Menunggu" };
 

@@ -3,6 +3,7 @@ import { ShieldCheck, UserX, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "../lib/api";
 import { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../context/AuthContext";
 import { fmtDateTime, ROLE_LABEL } from "../lib/format";
 
@@ -11,13 +12,27 @@ const ROLE_STYLE = { admin: "bg-amber-brand/15 text-amber-brand border-amber-bra
 export default function UsersPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
   const load = () => api.get("/users").then((r) => setUsers(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const patch = async (u, body) => {
     try { await api.patch(`/users/${u.user_id}`, body); toast.success(`Akun ${u.email} diperbarui`); load(); }
     catch (err) { toast.error(errorMessage(err)); }
+    finally { setPendingAction(null); }
   };
+
+  const confirmDeactivate = (u) => setPendingAction({
+    title: "Nonaktifkan pengguna ini?",
+    description: `Akun ${u.name || u.email} tidak akan bisa masuk ke sistem sampai diaktifkan kembali.`,
+    confirmLabel: "Nonaktifkan", tone: "danger", onConfirm: () => patch(u, { active: false }),
+  });
+
+  const confirmRoleChange = (u, role) => setPendingAction({
+    title: "Ubah peran pengguna ini?",
+    description: `Peran ${u.name || u.email} akan diubah dari ${ROLE_LABEL[u.role]} menjadi ${ROLE_LABEL[role]}.`,
+    confirmLabel: "Ubah Peran", tone: "warn", onConfirm: () => patch(u, { role }),
+  });
 
   const pending = (users || []).filter((u) => u.role === "pending").length;
 
@@ -37,7 +52,7 @@ export default function UsersPage() {
                     <tr key={u.user_id} data-testid={`user-row-${u.user_id}`}>
                       <td><div className="flex items-center gap-3">{u.picture ? <img src={u.picture} alt="" className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" /> : <div className="h-8 w-8 rounded-full bg-ink-700" />}<div><div className="font-semibold text-white">{u.name || "—"} {self && <span className="text-[10px] text-amber-brand">(Anda)</span>}</div><div className="text-xs text-slate-400">{u.email}</div></div></div></td>
                       <td>
-                        <select value={u.role} disabled={self} onChange={(e) => patch(u, { role: e.target.value })} data-testid={`user-role-select-${u.user_id}`} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider focus:outline-none disabled:opacity-60 ${ROLE_STYLE[u.role]}`} style={{ background: "transparent" }}>
+                        <select value={u.role} disabled={self} onChange={(e) => confirmRoleChange(u, e.target.value)} data-testid={`user-role-select-${u.user_id}`} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider focus:outline-none disabled:opacity-60 ${ROLE_STYLE[u.role]}`} style={{ background: "transparent" }}>
                           {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k} className="bg-ink-900 text-white normal-case">{v}</option>)}
                         </select>
                       </td>
@@ -45,7 +60,7 @@ export default function UsersPage() {
                       <td className="text-xs text-slate-400 whitespace-nowrap">{fmtDateTime(u.last_login)}</td>
                       <td className="text-right">
                         {!self && (u.active
-                          ? <button onClick={() => patch(u, { active: false })} className="btn-ghost !py-1 text-xs hover:!border-red-500/60 hover:!text-red-400" data-testid={`user-deactivate-${u.user_id}`}><UserX size={13} /> Nonaktifkan</button>
+                          ? <button onClick={() => confirmDeactivate(u)} className="btn-ghost !py-1 text-xs hover:!border-red-500/60 hover:!text-red-400" data-testid={`user-deactivate-${u.user_id}`}><UserX size={13} /> Nonaktifkan</button>
                           : <button onClick={() => patch(u, { active: true })} className="btn-ghost !py-1 text-xs" data-testid={`user-activate-${u.user_id}`}><UserCheck size={13} /> Aktifkan</button>)}
                       </td>
                     </tr>
@@ -56,6 +71,9 @@ export default function UsersPage() {
           </div>
         )}
       </Panel>
+      <ConfirmDialog open={!!pendingAction} title={pendingAction?.title} description={pendingAction?.description} confirmLabel={pendingAction?.confirmLabel}
+        tone={pendingAction?.tone} onConfirm={pendingAction?.onConfirm} onCancel={() => setPendingAction(null)} testId="user-action-confirm-dialog" />
     </div>
   );
 }
+
