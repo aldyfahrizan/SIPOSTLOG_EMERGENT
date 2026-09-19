@@ -12,6 +12,7 @@ from pymongo import ReturnDocument
 from starlette.concurrency import run_in_threadpool
 
 from auth import SESSION_DAYS, public_user
+from account_limits import ensure_account_slots, insert_user_with_limit
 
 
 class AdminLoginBody(BaseModel):
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     user_id: str
     email: str
     username: str = ""
+    is_primary: bool = False
     name: str
     picture: str
     role: str
@@ -40,15 +42,22 @@ async def seed_local_admin(db):
     await db.login_attempts.create_index("identifier", unique=True)
     await db.login_attempts.create_index("expires_at", expireAfterSeconds=0)
     await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    await ensure_account_slots(db)
     existing = await db.users.find_one({"username": username}, {"_id": 0})
-    await db.users.update_one({"username": username}, {"$setOnInsert": {
-        "user_id": f"user_{uuid.uuid4().hex[:12]}",
-        "email": os.environ["LOCAL_ADMIN_EMAIL"],
-        "username": username, "name": "Administrator SIPOSTLOG", "picture": "",
-        "auth_method": "password", "role": "admin", "active": True,
-        "password_hash": password_hash, "created_at": datetime.now(timezone.utc),
-        "last_login": None,
-    }}, upsert=True)
+    if not existing:
+        try:
+            await insert_user_with_limit(db, {
+                "user_id": f"user_{uuid.uuid4().hex[:12]}",
+                "email": os.environ["LOCAL_ADMIN_EMAIL"],
+                "username": username, "name": "Administrator SIPOSTLOG", "picture": "",
+                "auth_method": "password", "role": "admin", "active": True,
+                "password_hash": password_hash, "created_at": datetime.now(timezone.utc),
+                "last_login": None,
+            })
+        except HTTPException:
+            # Concurrent startup may have created the same administrator already.
+            if not await db.users.find_one({"username": username}, {"_id": 0, "user_id": 1}):
+                raise
     if existing and existing.get("password_hash") != password_hash:
         await db.users.update_one({"user_id": existing["user_id"]}, {"$set": {"password_hash": password_hash}})
         await db.user_sessions.delete_many({"user_id": existing["user_id"]})

@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import HTTPException, Request, Response
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from account_limits import insert_user_with_limit
 
 SESSION_DAYS = 7
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
@@ -25,6 +26,7 @@ def public_user(doc: dict) -> dict:
         "user_id": doc["user_id"],
         "email": doc["email"],
         "username": doc.get("username", ""),
+        "is_primary": doc.get("username") == os.environ["ADMIN_USERNAME"].strip().lower(),
         "name": doc.get("name", ""),
         "picture": doc.get("picture", ""),
         "role": doc.get("role", ROLE_PENDING),
@@ -46,6 +48,8 @@ async def exchange_session(db: AsyncIOMotorDatabase, session_id: str, response: 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     now = _now()
     if user is None:
+        if await db.deleted_users.find_one({"email": email}, {"_id": 0, "email": 1}):
+            raise HTTPException(status_code=403, detail="Akun telah dihapus oleh admin. Hubungi administrator.")
         user = {
             "user_id": f"user_{uuid.uuid4().hex[:12]}",
             "email": email,
@@ -56,7 +60,7 @@ async def exchange_session(db: AsyncIOMotorDatabase, session_id: str, response: 
             "created_at": now,
             "last_login": now,
         }
-        await db.users.insert_one(dict(user))
+        await insert_user_with_limit(db, user)
     else:
         update = {"name": data.get("name", user.get("name")), "picture": data.get("picture", user.get("picture")), "last_login": now}
         if email == admin_email and user.get("role") != ROLE_ADMIN:

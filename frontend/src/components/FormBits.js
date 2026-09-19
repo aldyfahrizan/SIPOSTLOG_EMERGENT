@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { fmtNum } from "../lib/format";
+import { fmtNum, fmtDateTime } from "../lib/format";
 import { StatusBadge } from "./StatusBadge";
+import { CancelTransactionButton } from "./AdminDeleteControls";
 
 export function useItems() {
   const [items, setItems] = useState([]);
-  const reload = () => api.get("/items").then((r) => setItems(r.data)).catch(() => {});
-  useEffect(() => { reload(); }, []);
+  const reload = useCallback(() => api.get("/items").then((r) => setItems(r.data)).catch(() => {}), []);
+  useEffect(() => { reload(); window.addEventListener("sipostlog:stock-changed", reload); return () => window.removeEventListener("sipostlog:stock-changed", reload); }, [reload]);
   return [items, reload];
 }
 
@@ -50,7 +51,8 @@ export function ResultCard({ tx, onReset }) {
       <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Transaksi tercatat</div>
       <div className="mt-1 font-mono text-xs text-slate-400">{tx.transaction_id}</div>
       <div className="mt-3 text-sm text-slate-200">{tx.item_name}: <span className="num">{fmtNum(tx.previous_quantity)}</span> → <b className="num text-white">{fmtNum(tx.new_quantity)}</b> {tx.unit} <span className={tx.change_quantity >= 0 ? "text-emerald-400" : "text-amber-400"}>({tx.change_quantity > 0 ? "+" : ""}{fmtNum(tx.change_quantity)})</span></div>
-      <button onClick={onReset} className="btn-ghost mt-4 !py-1.5 text-xs" data-testid="transaction-result-reset">Catat lagi</button>
+      {tx.type === "OUT" && <div className="mt-3 space-y-1 text-xs text-slate-600" data-testid="distribution-saved-details"><p data-testid="distribution-saved-time">{fmtDateTime(tx.occurred_at)} · {tx.destination}</p><p data-testid="distribution-saved-recipients">Penerima: {tx.recipient_kk == null ? "KK belum dicatat" : `${fmtNum(tx.recipient_kk)} KK`} · {tx.recipient_jiwa == null ? "Jiwa belum dicatat" : `${fmtNum(tx.recipient_jiwa)} jiwa`}</p></div>}
+      <div className="mt-4 flex flex-wrap gap-2"><button onClick={onReset} className="btn-ghost !py-1.5 text-xs" data-testid="transaction-result-reset">Catat lagi</button><CancelTransactionButton transaction={tx} onCancelled={onReset} /></div>
     </div>
   );
 }

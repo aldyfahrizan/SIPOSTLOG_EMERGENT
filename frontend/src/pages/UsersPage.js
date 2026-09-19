@@ -1,79 +1,65 @@
-import { useEffect, useState } from "react";
-import { ShieldCheck, UserX, UserCheck } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ShieldCheck, UserPlus, Users, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "../lib/api";
-import { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
+import { PageHeader, Spinner } from "../components/StatCard";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { UserCreateDialog } from "../components/UserCreateDialog";
+import { UsersTable } from "../components/UsersTable";
 import { useAuth } from "../context/AuthContext";
-import { fmtDateTime, ROLE_LABEL } from "../lib/format";
-
-const ROLE_STYLE = { admin: "bg-amber-brand/15 text-amber-brand border-amber-brand/30", petugas: "bg-sky-500/15 text-sky-300 border-sky-500/30", pending: "bg-slate-500/15 text-slate-300 border-slate-500/30" };
+import { ROLE_LABEL } from "../lib/format";
 
 export default function UsersPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState(null);
+  const [capacity, setCapacity] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
-  const load = () => api.get("/users").then((r) => setUsers(r.data)).catch(() => {});
-  useEffect(() => { load(); }, []);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    setError(""); setLoading(true);
+    try {
+      const [list, quota] = await Promise.all([api.get("/users"), api.get("/users/capacity")]);
+      setUsers(list.data); setCapacity(quota.data);
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const patch = async (u, body) => {
-    try { await api.patch(`/users/${u.user_id}`, body); toast.success(`Akun ${u.email} diperbarui`); load(); }
+  const patch = async (user, body) => {
+    try { await api.patch(`/users/${user.user_id}`, body); toast.success(`Akun ${user.name} diperbarui`); await load(); }
     catch (err) { toast.error(errorMessage(err)); }
     finally { setPendingAction(null); }
   };
-
-  const confirmDeactivate = (u) => setPendingAction({
+  const confirmDeactivate = (user) => setPendingAction({
     title: "Nonaktifkan pengguna ini?",
-    description: `Akun ${u.name || u.email} tidak akan bisa masuk ke sistem sampai diaktifkan kembali.`,
-    confirmLabel: "Nonaktifkan", tone: "danger", onConfirm: () => patch(u, { active: false }),
+    description: `Akun ${user.name} tidak dapat masuk sampai diaktifkan kembali. Akun nonaktif tetap dihitung dalam batas 10 pengguna.`,
+    confirmLabel: "Nonaktifkan", tone: "danger", onConfirm: () => patch(user, { active: false }),
   });
-
-  const confirmRoleChange = (u, role) => setPendingAction({
-    title: "Ubah peran pengguna ini?",
-    description: `Peran ${u.name || u.email} akan diubah dari ${ROLE_LABEL[u.role]} menjadi ${ROLE_LABEL[role]}.`,
-    confirmLabel: "Ubah Peran", tone: "warn", onConfirm: () => patch(u, { role }),
+  const confirmRoleChange = (user, role) => setPendingAction({
+    title: "Ubah peran pengguna ini?", description: `Peran ${user.name} akan diubah dari ${ROLE_LABEL[user.role]} menjadi ${ROLE_LABEL[role]}.`,
+    confirmLabel: "Ubah Peran", tone: "warn", onConfirm: () => patch(user, { role }),
   });
+  const pending = (users || []).filter((user) => user.role === "pending").length;
+  const full = capacity?.remaining === 0;
 
-  const pending = (users || []).filter((u) => u.role === "pending").length;
+  return <div data-testid="users-page">
+    <PageHeader eyebrow="Administrasi" title="Kelola Pengguna" description="Buat akun dan atur tugas setiap pengguna SIPOSTLOG." actions={
+      <button onClick={() => setCreateOpen(true)} disabled={loading || !!error || !capacity || full} data-testid="user-add-button" className="btn-primary"><UserPlus size={16} /> Tambah Pengguna</button>
+    } />
 
-  return (
-    <div data-testid="users-page">
-      <PageHeader eyebrow="Administrasi" title="Kelola Pengguna" description="Akun dan hak akses SIPOSTLOG." />
-      {pending > 0 && <div className="mb-5 flex items-center gap-2 rounded-lg border border-amber-brand/40 bg-amber-brand/10 p-3 text-sm text-amber-200" data-testid="pending-users-alert"><ShieldCheck size={16} /> {pending} akun menunggu persetujuan.</div>}
-      <Panel testId="users-table-panel">
-        {!users ? <Spinner /> : users.length === 0 ? <EmptyState text="Belum ada pengguna." /> : (
-          <div className="overflow-x-auto scrollbar-thin -mx-2">
-            <table className="tbl">
-              <thead><tr><th>Pengguna</th><th>Peran</th><th>Status</th><th>Terakhir Masuk</th><th className="text-right">Tindakan</th></tr></thead>
-              <tbody>
-                {users.map((u) => {
-                  const self = u.user_id === me.user_id;
-                  return (
-                    <tr key={u.user_id} data-testid={`user-row-${u.user_id}`}>
-                      <td><div className="flex items-center gap-3">{u.picture ? <img src={u.picture} alt="" className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" /> : <div className="h-8 w-8 rounded-full bg-ink-700" />}<div><div className="font-semibold text-white">{u.name || "—"} {self && <span className="text-[10px] text-amber-brand">(Anda)</span>}</div><div className="text-xs text-slate-400">{u.email}</div></div></div></td>
-                      <td>
-                        <select value={u.role} disabled={self} onChange={(e) => confirmRoleChange(u, e.target.value)} data-testid={`user-role-select-${u.user_id}`} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider focus:outline-none disabled:opacity-60 ${ROLE_STYLE[u.role]}`} style={{ background: "transparent" }}>
-                          {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k} className="bg-ink-900 text-white normal-case">{v}</option>)}
-                        </select>
-                      </td>
-                      <td><span className={`text-xs font-bold ${u.active ? "text-emerald-400" : "text-red-400"}`} data-testid={`user-status-${u.user_id}`}>{u.active ? "Aktif" : "Nonaktif"}</span></td>
-                      <td className="text-xs text-slate-400 whitespace-nowrap">{fmtDateTime(u.last_login)}</td>
-                      <td className="text-right">
-                        {!self && (u.active
-                          ? <button onClick={() => confirmDeactivate(u)} className="btn-ghost !py-1 text-xs hover:!border-red-500/60 hover:!text-red-400" data-testid={`user-deactivate-${u.user_id}`}><UserX size={13} /> Nonaktifkan</button>
-                          : <button onClick={() => patch(u, { active: true })} className="btn-ghost !py-1 text-xs" data-testid={`user-activate-${u.user_id}`}><UserCheck size={13} /> Aktifkan</button>)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-      <ConfirmDialog open={!!pendingAction} title={pendingAction?.title} description={pendingAction?.description} confirmLabel={pendingAction?.confirmLabel}
-        tone={pendingAction?.tone} onConfirm={pendingAction?.onConfirm} onCancel={() => setPendingAction(null)} testId="user-action-confirm-dialog" />
-    </div>
-  );
+    <section className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5 rounded-xl border border-blue-100 bg-white p-5 sm:p-6" data-testid="users-capacity-panel">
+      <div className="flex items-center gap-4"><div className="rounded-xl bg-blue-50 p-3 text-brand-blue"><Users size={23} /></div><div><h2 className="text-sm font-semibold text-slate-600" data-testid="users-capacity-title">Kapasitas pengguna</h2><p data-testid="users-capacity-count" className="mt-1 font-mono text-2xl font-bold text-brand-blue">{capacity ? `${capacity.total} / ${capacity.limit}` : "— / 10"}<span className="ml-2 font-body text-sm font-medium text-slate-500">akun</span></p></div></div>
+      <div className="sm:max-w-xs sm:w-full"><p className="text-sm font-semibold text-brand-blue" data-testid="users-capacity-remaining">{capacity ? (full ? "Kapasitas penuh" : `${capacity.remaining} slot pengguna tersisa`) : "Menghitung kapasitas…"}</p><div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden" aria-hidden="true"><div className="h-full rounded-full bg-brand-blue transition-[width] duration-300" style={{ width: `${capacity ? Math.min(100, (capacity.total / capacity.limit) * 100) : 0}%` }} /></div><p className="mt-2 text-xs leading-relaxed text-slate-500" data-testid="users-capacity-description">Termasuk admin utama, akun nonaktif, dan akun yang menunggu persetujuan.</p></div>
+    </section>
+
+    {full && <p role="status" data-testid="users-limit-alert" className="mb-5 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">Batas maksimal 10 pengguna telah tercapai. Akun baru tidak dapat ditambahkan.</p>}
+    {pending > 0 && <p data-testid="pending-users-alert" className="mb-5 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-brand-blue"><ShieldCheck size={16} /> {pending} akun menunggu persetujuan.</p>}
+    {error && <div role="alert" data-testid="users-load-error" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<button onClick={load} data-testid="users-retry-button" className="inline-flex items-center gap-2 font-semibold"><RefreshCw size={15} /> Coba lagi</button></div>}
+    {loading && !users ? <Spinner /> : users && <UsersTable users={users} currentUserId={me.user_id} onRoleChange={confirmRoleChange} onDeactivate={confirmDeactivate} onActivate={(user) => patch(user, { active: true })} onDeleted={load} />}
+
+    {createOpen && <UserCreateDialog capacity={capacity} onClose={() => setCreateOpen(false)} onRefresh={load} onCreated={(user) => { setCreateOpen(false); toast.success(`Pengguna ${user.name} berhasil ditambahkan`); load(); }} />}
+    <ConfirmDialog open={!!pendingAction} title={pendingAction?.title} description={pendingAction?.description} confirmLabel={pendingAction?.confirmLabel} tone={pendingAction?.tone} onConfirm={pendingAction?.onConfirm} onCancel={() => setPendingAction(null)} testId="user-action-confirm-dialog" />
+  </div>;
 }
-

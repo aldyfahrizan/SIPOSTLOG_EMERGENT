@@ -1,5 +1,5 @@
 export const STATUS_LABEL = { aman: "Aman", menipis: "Menipis", habis: "Habis", rencana: "Rencana", "tidak-dianggarkan": "Tidak Dianggarkan" };
-export const TYPE_LABEL = { IN: "Barang Masuk", OUT: "Penyaluran", ADJUSTMENT: "Koreksi" };
+export const TYPE_LABEL = { IN: "Barang Masuk", OUT: "Penyaluran", ADJUSTMENT: "Koreksi", REVERSAL: "Pembatalan" };
 export const ROLE_LABEL = { admin: "Admin", petugas: "Petugas Gudang", opname: "Petugas Stock Opname", pending: "Menunggu" };
 
 export function fmtDateTime(iso) {
@@ -25,4 +25,10 @@ export function todayYMD(offsetDays = 0) {
 
 export function fmtNum(n) {
   return new Intl.NumberFormat("id-ID").format(n ?? 0);
+}
+
+export function witaDateTime() {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Makassar", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
 }

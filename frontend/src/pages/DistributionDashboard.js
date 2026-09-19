@@ -6,20 +6,24 @@ import { api, downloadFile } from "../lib/api";
 import StatCard, { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
 import DateRangePicker from "../components/DateRangePicker";
 import { fmtDateTime, fmtNum, fmtShortDay, todayYMD } from "../lib/format";
+import { CancelTransactionButton } from "../components/AdminDeleteControls";
+import { useAuth } from "../context/AuthContext";
 
 const PALETTE = ["#F59E0B", "#38BDF8", "#34D399", "#F472B6", "#A78BFA", "#FB923C"];
 const TT = { background: "#0F172A", border: "1px solid #334155", borderRadius: 8, fontSize: 12 };
 
 export default function DistributionDashboard() {
+  const { isAdmin } = useAuth();
   const [range, setRange] = useState({ start: todayYMD(-29), end: todayYMD() });
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState("");
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     if (!range.start || !range.end) return;
     setData(null);
     api.get("/dashboard/distribution", { params: range }).then((r) => setData(r.data)).catch((e) => toast.error(e.response?.data?.detail || "Gagal memuat"));
-  }, [range]);
+  }, [range, revision]);
 
   const exportFile = async (key, path, name) => {
     setBusy(key);
@@ -29,7 +33,7 @@ export default function DistributionDashboard() {
 
   return (
     <div data-testid="distribution-dashboard">
-      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Penyaluran" description="Rekapitulasi penyaluran logistik ke posko dan wilayah terdampak. Data ini hanya tersedia bagi petugas dan tidak ditampilkan ke publik."
+      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Penyaluran" description="Rincian lengkap penyaluran ke posko dan wilayah terdampak. Jumlah barang dan identitas petugas tetap khusus internal; publik hanya melihat waktu, lokasi, jenis logistik, dan penerima KK/jiwa."
         actions={<>
           <button onClick={() => exportFile("pdf", `/export/distribution/pdf?start=${range.start}&end=${range.end}`, "penyaluran.pdf")} disabled={!!busy} className="btn-ghost" data-testid="distribution-export-pdf-button"><FileText size={14} /> {busy === "pdf" ? "Mencetak…" : "Cetak PDF"}</button>
           <button onClick={() => exportFile("xlsx", `/export/distribution?start=${range.start}&end=${range.end}`, "penyaluran.xlsx")} disabled={!!busy} className="btn-primary" data-testid="distribution-export-button"><Download size={14} /> Ekspor Excel</button>
@@ -106,8 +110,8 @@ export default function DistributionDashboard() {
 
           <Panel className="mt-6" title="Penyaluran Terbaru" subtitle="15 transaksi terakhir dalam rentang" testId="panel-recent-distributions">
             {data.recent.length === 0 ? <EmptyState text="Belum ada data." /> : (
-              <div className="overflow-x-auto scrollbar-thin -mx-2"><table className="tbl"><thead><tr><th>Waktu</th><th>Item</th><th className="text-right">Jumlah</th><th>Tujuan</th><th>Kejadian</th><th>Petugas</th></tr></thead>
-                <tbody>{data.recent.map((t) => <tr key={t.transaction_id}><td className="text-xs text-slate-400 whitespace-nowrap">{fmtDateTime(t.occurred_at)}</td><td className="font-semibold text-white">{t.item_name}</td><td className="text-right num font-bold text-amber-brand">{fmtNum(-t.change_quantity)} <span className="text-slate-500 text-xs font-normal">{t.unit}</span></td><td className="text-slate-300">{t.destination}</td><td className="text-slate-400 text-xs">{t.incident_type}</td><td className="text-slate-400 text-xs">{t.user_name}</td></tr>)}</tbody></table></div>
+              <div className="overflow-x-auto scrollbar-thin -mx-2"><table className="tbl"><thead><tr><th>Waktu</th><th>Item</th><th className="text-right">Jumlah</th><th>Tujuan</th><th>Kejadian</th><th>Petugas</th>{isAdmin && <th>Tindakan</th>}</tr></thead>
+                <tbody>{data.recent.map((t) => <tr key={t.transaction_id} data-testid={`distribution-row-${t.transaction_id}`}><td className="text-xs text-slate-400 whitespace-nowrap">{fmtDateTime(t.occurred_at)}</td><td className="font-semibold text-white">{t.item_name}</td><td className="text-right num font-bold text-amber-brand">{fmtNum(-t.change_quantity)} <span className="text-slate-500 text-xs font-normal">{t.unit}</span></td><td className="text-slate-300">{t.destination}</td><td className="text-slate-400 text-xs">{t.incident_type}</td><td className="text-slate-400 text-xs">{t.user_name}</td>{isAdmin && <td><CancelTransactionButton transaction={t} onCancelled={() => setRevision((value) => value + 1)} /></td>}</tr>)}</tbody></table></div>
             )}
           </Panel>
         </>

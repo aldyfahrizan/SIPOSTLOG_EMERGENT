@@ -1,6 +1,18 @@
 # SIPOSTLOG — PRD & Progress
 
-## Status terbaru — 19 September 2026, perbaikan login diprioritaskan
+## Status terbaru — 19 September 2026, review kesiapan deploy (Vercel + Railway + Atlas)
+
+### Review kesiapan deploy (selesai)
+- Diminta: siapkan app agar bisa dideploy live — frontend ke Vercel, backend ke Railway, database ke MongoDB Atlas.
+- Audit `deployment_agent`: 1 BLOCKER ditemukan & diperbaiki — `backend/server.py` load_dotenv `override=True` → `override=False` (agar env var Railway tidak tertimpa file `.env` lokal).
+- Tidak ada secret/URL localhost hardcoded. Cookie sesi (`secure=True, samesite=none`) sudah sesuai untuk domain frontend/backend berbeda. CORS_ORIGINS allowlist eksplisit (bukan wildcard) dipakai oleh CORSMiddleware & middleware custom `protect_session_requests` — jangan diganti ke `"*"`.
+- File baru ditambahkan: `backend/Procfile`, `backend/railway.json`, `backend/.python-version` (pin 3.11.16), `frontend/vercel.json` (build settings + rewrite React Router).
+- `.gitignore` root ditambah `memory/test_credentials.md`.
+- Dokumentasi lengkap langkah deploy & daftar env var: `/app/DEPLOY.md` (Bahasa Indonesia).
+- Verifikasi: `yarn build` frontend sukses tanpa error; backend restart bersih; login admin + `/api/auth/me` tetap 200 setelah perubahan.
+- Belum dilakukan (di luar cakupan, milik pengguna): membuat akun Atlas/Railway/Vercel, klik deploy sesungguhnya, isi env var final di dashboard masing-masing platform.
+
+## Status sebelumnya — 19 September 2026, perbaikan login diprioritaskan
 
 ### Permintaan pengguna saat ini (asli)
 Back End Repo Sipostlog masih membuat saya tidak bisa login, tolong buatkan agar saya bisa login menggunakan akun dengan password admin dan username admin, serta tambahkan menu penambahan barang, penghapusan barang, pembuatan Berita Acara Penyaluran secara otomatis di dalam website ,buatkan agar admin bisa membuat akun pengguna sesuai tugas, contoh pencatatan stock opname dan lain lain. juga admin bisa mengupload daftar stock opname terbaru ke dalam dashboard (sediakan menu dengan AI ) sehingga AI bisa membaca file excel stock opnamenya dan otomatis mengupdate data, dan tambahkan menu manual bagi petugas gudang.
@@ -31,6 +43,7 @@ Pengguna kemudian memprioritaskan: “Asal permintaan tidak diizinkan ketika men
 
 ### Backlog terprioritas dan tugas selanjutnya
 - P0 selesai: akses login admin, konsistensi Origin/CORS, sesi dan throttle terverifikasi.
+- P0 selesai: review kesiapan deploy (Vercel/Railway/Atlas) — lihat DEPLOY.md.
 - P1: UI kelola barang dan akun pengguna; penyaringan navigasi/perlindungan route sesuai tugas. Jangan mengklaim fitur baru sudah tersedia end-to-end.
 - P1: Berita Acara Penyaluran bernomor otomatis, multi-barang, penerima, penandatangan, PDF/cetak; pastikan stok tidak terpotong dua kali.
 - P1: impor Excel AI dengan pratinjau dan konfirmasi wajib, deteksi perubahan stok setelah pratinjau, validasi duplikat/nilai negatif/desimal/ID tak dikenal, audit dan idempotensi. Menu Excel lama masih langsung menerapkan impor template; belum ada alur AI.

@@ -1,183 +1,149 @@
 {
-  "project_name": "Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)",
+  "project_name": "SIPOSTLOG - Public Logistics Distribution Dashboard",
   "app_type": "dashboard",
-  "archetype": "SIKD Bright Civic Minimalist (Light Mode)",
-  "theme_strategy": {
-    "mode": "Light",
-    "background": "#F8FAFC",
-    "surface": "#FFFFFF",
-    "primary": "#1E3A8A",
-    "accent": "#C2410C",
-    "border": "#E2E8F0",
-    "rule": "Preserve existing light civic aesthetic. Use crisp white cards, slate borders, deep navy headers, and orange active accents. Avoid dark backgrounds."
+  "context": {
+    "target_audience": "Public community members, local citizens, disaster response monitoring authorities in Kabupaten Banjar",
+    "emotional_tone": "Authoritative, transparent, calm, civic-oriented, precise",
+    "design_archetype": "Organic & Earthy / Civic Performance Pro (Light Navy & BPBD Orange)",
+    "primary_goal": "Provide a clean, accessible public distribution dashboard placed below 'Jenis Logistik' showing distribution activity over the last 7, 14, or 30 days via interactive chart only (with date range toggles, distribution time, location, distributed item names without quantities, and beneficiary household/person counts)."
   },
   "typography": {
-    "font_display": "Plus Jakarta Sans, sans-serif",
-    "font_body": "Manrope, sans-serif",
-    "font_mono": "JetBrains Mono, monospace",
-    "hierarchy": {
-      "h1": "text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900",
-      "h2": "text-xl sm:text-2xl font-bold tracking-tight text-slate-900",
-      "h3": "text-lg sm:text-xl font-semibold text-slate-900",
-      "body": "text-sm sm:text-base text-slate-600 leading-relaxed",
-      "label": "text-xs font-bold uppercase tracking-wider text-slate-500",
-      "mono_numbers": "font-mono tabular-nums font-semibold text-slate-900"
+    "font_family_display": "Plus Jakarta Sans, sans-serif",
+    "font_family_body": "Manrope, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "rules": {
+      "anti_default": "Strictly use Plus Jakarta Sans for titles/headers and Manrope for body text. JetBrains Mono for dates, units, and numeric data.",
+      "hierarchy": {
+        "section_heading": "text-lg md:text-xl font-bold text-brand-blue (#1E3A8A)",
+        "subheading_label": "text-xs font-semibold uppercase tracking-wider text-slate-500",
+        "chart_tooltip_title": "text-xs font-bold text-slate-900",
+        "chart_tooltip_body": "text-xs text-slate-600"
+      }
     }
   },
-  "color_palette": {
-    "primary_navy": "#1E3A8A",
-    "primary_navy_hover": "#1D4ED8",
-    "accent_orange": "#C2410C",
-    "accent_orange_hover": "#EA580C",
-    "bg_slate": "#F8FAFC",
-    "card_white": "#FFFFFF",
-    "border_light": "#E2E8F0",
-    "border_focus": "#C2410C",
-    "text_primary": "#0F172A",
-    "text_secondary": "#64748B",
-    "status_emerald": "#059669",
-    "status_amber": "#D97706",
-    "status_rose": "#DC2626",
-    "status_blue": "#2563EB"
-  },
-  "auth_login_system": {
-    "admin_login_credentials": {
-      "username": "admin",
-      "password": "admin"
+  "colors": {
+    "brand_blue": "#1E3A8A",
+    "brand_orange": "#C2410C",
+    "amber_accent": "#F59E0B",
+    "bg_paper": "#F8FAFC",
+    "bg_card": "#FFFFFF",
+    "border_slate": "#E2E8F0",
+    "slate_text_primary": "#1E293B",
+    "slate_text_secondary": "#64748B",
+    "slate_text_muted": "#94A3B8",
+    "chart_palette": {
+      "primary_bar": "#1E3A8A",
+      "accent_bar": "#C2410C",
+      "area_fill": "#EFF6FF",
+      "grid_lines": "#F1F5F9",
+      "tooltip_bg": "#FFFFFF"
     },
-    "login_endpoint": "/api/auth/login",
-    "user_roles": [
-      { "key": "admin", "label": "Administrator Super" },
-      { "key": "petugas_gudang", "label": "Petugas Gudang" },
-      { "key": "tim_stock_opname", "label": "Tim Stock Opname" }
-    ],
-    "login_form_requirements": [
-      "Ensure username 'admin' and password 'admin' authenticates successfully.",
-      "Input field for password MUST use type='password'.",
-      "Include data-testid='login-username-input', data-testid='login-password-input', and data-testid='login-submit-button'."
+    "rules": {
+      "contrast_compliance": "All chart text and labels must maintain a minimum contrast ratio of 4.5:1. Tooltips must have solid white background with #CBD5E1 border, no transparent overlay.",
+      "hover_contrast": "Toggle buttons on hover must explicitly set both background and text colors."
+    }
+  },
+  "layout_and_placement": {
+    "placement": "Directly below the 'Jenis Logistik' catalog section in PublicPage.js",
+    "container_style": "rounded-xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm mt-10",
+    "header_controls": {
+      "title": "Dashboard Penyaluran Logistik",
+      "subtitle": "Riwayat dan lokasi penyaluran logistik terkini (7, 14, & 30 hari terakhir)",
+      "timeframe_buttons": [
+        { "label": "7 Hari", "value": 7, "test_id": "distribution-days-filter-7" },
+        { "label": "14 Hari", "value": 14, "test_id": "distribution-days-filter-14" },
+        { "label": "30 Hari", "value": 30, "test_id": "distribution-days-filter-30" }
+      ]
+    }
+  },
+  "chart_specifications": {
+    "chart_type": "Recharts ResponsiveContainer with ComposedChart / BarChart",
+    "x_axis": {
+      "dataKey": "formatted_date",
+      "tick_font": "font-mono text-[11px] fill-slate-500",
+      "stroke": "#CBD5E1"
+    },
+    "y_axis": {
+      "dataKey": "beneficiary_kk",
+      "label": "Jumlah Penerima (KK / Jiwa)",
+      "tick_font": "font-mono text-[11px] fill-slate-500",
+      "allowDecimals": false
+    },
+    "tooltip": {
+      "custom_component": "DistributionCustomTooltip",
+      "displayed_fields": [
+        "Tanggal & Waktu Penyaluran (Date & Time)",
+        "Lokasi Penyaluran (Location)",
+        "Jenis Logistik Disalurkan (Item names list, NO quantities)",
+        "Penerima: Jumlah KK (Households) & Jumlah Jiwa (Persons)"
+      ],
+      "rules": "DO NOT aggregate or sum beneficiary counts across distinct events. Represent each actual distribution event as recorded. Do NOT show item quantities or stock numbers."
+    }
+  },
+  "states": {
+    "loading": {
+      "ui": "Animated skeleton chart frame with 'Memuat data penyaluran logistik…'",
+      "test_id": "distribution-loading"
+    },
+    "error": {
+      "ui": "Alert banner with message 'Gagal memuat data penyaluran' and a retry button 'Coba lagi'",
+      "test_id": "distribution-load-error",
+      "retry_test_id": "distribution-retry-button"
+    },
+    "empty": {
+      "ui": "Informational banner 'Tidak ada catatan penyaluran logistik pada rentang waktu ini.'",
+      "test_id": "distribution-empty-state"
+    }
+  },
+  "internal_form_fields": {
+    "fields_to_add": [
+      {
+        "name": "recipient_kk",
+        "label": "Jumlah Penerima (KK)",
+        "type": "number",
+        "optional": true,
+        "fallback_display": "Belum dicatat",
+        "test_id": "recipient-kk-input"
+      },
+      {
+        "name": "recipient_jiwa",
+        "label": "Jumlah Penerima (Jiwa)",
+        "type": "number",
+        "optional": true,
+        "fallback_display": "Belum dicatat",
+        "test_id": "recipient-jiwa-input"
+      }
     ]
   },
-  "routes_and_navigation": [
-    {
-      "path": "/app/barang",
-      "label": "Kelola Barang",
-      "icon": "Package",
-      "data_testid": "internal-sidebar-nav-barang",
-      "purpose": "Tambah barang baru, edit rincian barang, dan hapus barang dari inventaris."
-    },
-    {
-      "path": "/app/berita-acara",
-      "label": "Berita Acara Penyaluran",
-      "icon": "FileText",
-      "data_testid": "internal-sidebar-nav-berita-acara",
-      "purpose": "Pembuatan dan cetak dokumen resmi Berita Acara Penyaluran Logistik secara otomatis dengan penomoran unik."
-    },
-    {
-      "path": "/app/impor-ai",
-      "label": "Stock Opname AI",
-      "icon": "Sparkles",
-      "data_testid": "internal-sidebar-nav-impor-ai",
-      "purpose": "Upload file Excel stock opname dengan pemetaan kolom AI (AI header mapping), pratinjau data, dan konfirmasi pembaruan otomatis."
-    },
-    {
-      "path": "/app/pengguna",
-      "label": "Kelola Pengguna",
-      "icon": "Users",
-      "data_testid": "internal-sidebar-nav-pengguna",
-      "admin_only": true,
-      "purpose": "Tambah dan atur akun pengguna berdasarkan tugas (Admin, Petugas Gudang, Tim Stock Opname)."
-    },
-    {
-      "path": "/app/barang-masuk",
-      "label": "Catat Barang Masuk",
-      "icon": "ArrowDownToLine",
-      "data_testid": "internal-sidebar-nav-barang-masuk",
-      "purpose": "Pencatatan manual transaksi barang masuk oleh Petugas Gudang."
-    },
-    {
-      "path": "/app/catat-penyaluran",
-      "label": "Catat Penyaluran",
-      "icon": "Truck",
-      "data_testid": "internal-sidebar-nav-catat-penyaluran",
-      "purpose": "Pencatatan manual penyaluran logistik bencana oleh Petugas Gudang."
-    }
-  ],
-  "components_specification": {
-    "item_management": {
-      "path": "frontend/src/pages/ItemsManagementPage.js",
-      "data_testids": [
-        "item-add-button",
-        "item-name-input",
-        "item-category-select",
-        "item-unit-input",
-        "item-min-stock-input",
-        "item-save-button",
-        "item-delete-button-",
-        "item-search-input"
-      ]
-    },
-    "berita_acara": {
-      "path": "frontend/src/pages/BeritaAcaraPage.js",
-      "features": [
-        "Auto-generated document serial number (e.g. BAP/BPBD/2026/001)",
-        "Form input for recipient (penerima), location (lokasi bencana), disaster event (kejadian bencana), and distribution date",
-        "Multi-item table selector with quantity input",
-        "Printable formatted view (A4 layout print preview / PDF generate)"
-      ],
-      "data_testids": [
-        "ba-number-input",
-        "ba-recipient-input",
-        "ba-location-input",
-        "ba-event-input",
-        "ba-add-item-button",
-        "ba-generate-print-button"
-      ]
-    },
-    "excel_ai_import": {
-      "path": "frontend/src/pages/AiStockOpnamePage.js",
-      "features": [
-        "Drag & drop or file selector for Excel (.xlsx, .xls)",
-        "AI column detection header mapping preview (Kode Barang, Nama Barang, Stok Fisik, Kondisi, Catatan)",
-        "Diff preview confirmation dialog showing changes (Old stock vs New AI mapped stock)",
-        "Commit stock opname update action button"
-      ],
-      "data_testids": [
-        "ai-excel-file-input",
-        "ai-excel-analyze-button",
-        "ai-excel-mapping-preview",
-        "ai-excel-confirm-update-button"
-      ]
-    },
-    "user_management": {
-      "path": "frontend/src/pages/UsersPage.js",
-      "features": [
-        "Form create user (Username, Nama Lengkap, Password, Peran/Role)",
-        "List of existing users with role badges",
-        "Reset password or delete user trigger"
-      ],
-      "data_testids": [
-        "user-create-username-input",
-        "user-create-name-input",
-        "user-create-password-input",
-        "user-create-role-select",
-        "user-create-submit-button"
-      ]
-    }
+  "data_testid_convention": {
+    "section": "public-distribution-dashboard",
+    "filter_7d": "distribution-days-filter-7",
+    "filter_14d": "distribution-days-filter-14",
+    "filter_30d": "distribution-days-filter-30",
+    "chart_container": "distribution-chart-container",
+    "tooltip": "distribution-tooltip",
+    "loading": "distribution-loading",
+    "error": "distribution-load-error",
+    "retry_button": "distribution-retry-button",
+    "empty_state": "distribution-empty-state",
+    "recipient_kk_input": "recipient-kk-input",
+    "recipient_jiwa_input": "recipient-jiwa-input"
   },
   "instructions_to_main_agent": [
-    "1. FIX LOGIN BUG: Ensure admin backend login recognizes username 'admin' with password 'admin'. Fix any auth hash or query mismatch.",
-    "2. INVENTORY MANAGEMENT (/app/barang): Create full CRUD page to add, edit, search, and delete logistik items (Penambahan & Penghapusan Barang).",
-    "3. AUTOMATED BERITA ACARA (/app/berita-acara): Build automated Berita Acara Penyaluran generator with auto-numbering, multi-item table selection, and print-ready document view.",
-    "4. AI EXCEL STOCK OPNAME (/app/impor-ai): Create Excel upload flow where backend/AI parses column headers, renders preview mapping confirmation, and updates stock opname upon user confirmation.",
-    "5. USER CREATION BY ROLE (/app/pengguna): Allow admin to create local accounts with roles: admin, petugas_gudang, and tim_stock_opname.",
-    "6. WAREHOUSE MANUAL TASKS: Keep and enhance manual forms for barang masuk (/app/barang-masuk) and penyaluran (/app/catat-penyaluran).",
-    "7. DATA-TESTID STRICTNESS: Every form field, button, table row, and modal must include specific role-based data-testid attributes."
+    "1. Render the new Public Distribution Dashboard section on PublicPage.js directly underneath the #jenis-logistik main catalog area.",
+    "2. Use Recharts (ResponsiveContainer, BarChart or ComposedChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid) for rendering the chart.",
+    "3. Ensure public API returns events containing date, location, item names array (without quantities or stock levels), recipient KK count, and recipient Jiwa count.",
+    "4. For legacy or missing recipient values, display 'Belum dicatat' in tooltip details.",
+    "5. Include 7 Hari, 14 Hari, and 30 Hari timeframe pill switches at the top right of the dashboard section, with active state using bg-brand-blue text-white and inactive bg-slate-100 text-slate-700 hover:bg-slate-200.",
+    "6. Ensure tooltips show: Waktu & Tanggal, Lokasi, Jenis Logistik Disalurkan (bulleted list of item names only), and Penerima (x KK / y Jiwa).",
+    "7. Never display item quantities, stock availability, or personal beneficiary names in public endpoints or public UI.",
+    "8. Apply data-testid attributes to all interactive elements, filters, state messages, and inputs as specified in data_testid_convention.",
+    "9. Ensure mobile responsiveness: x-axis labels must rotate or format concisely (e.g., '12 Mei' or '12/05') and chart height should adjust smoothly (e.g. h-72 sm:h-80)."
   ],
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
-    "All interactive elements MUST include data-testid attributes (kebab-case).",
-    "Maintain contrast accessibility standards. Hover states must explicitly set text color.",
-    "Do NOT use transparent backgrounds for header, overlays, or dropdown menus.",
-    "Never show plain passwords on screen; always use input type='password'.",
-    "Ensure standard light mode responsive grid layout with minimum internal padding p-4 or p-6."
-  ]
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "testing_attributes": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case.",
+    "contrast_and_accessibility": "Maintain high contrast for all text over backgrounds. Tooltips and dropdowns MUST NOT have fully transparent backgrounds.",
+    "file_type": "This project uses .js files, not .tsx files. Follow standard React JSX syntax.",
+    "animations": "Use smooth micro-interactions on hover and active states without breaking layout transitions."
+  }
 }

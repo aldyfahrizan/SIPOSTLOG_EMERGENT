@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env", override=True)
+load_dotenv(ROOT_DIR / ".env", override=False)
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +26,10 @@ from excel_utils import build_opname_template, build_workbook, parse_opname_uplo
 from pdf_utils import build_pdf_report
 from seed_data import CATALOG_VERSION, DESTINATION_CYCLE, EXPECTED_ITEM_COUNT, INCIDENT_TYPES, INITIAL_ITEMS
 from management import router as management_router
+from public_catalog import router as public_catalog_router
+from public_distribution import router as public_distribution_router
+from distribution_utils import distribution_occurred_at
+from admin_actions import router as admin_actions_router, reconcile_cancellations
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sipostlog")
@@ -39,6 +43,7 @@ api = APIRouter(prefix="/api")
 
 WAREHOUSE = (ROLE_ADMIN, ROLE_PETUGAS)
 STAFF = (*WAREHOUSE, ROLE_OPNAME)
+ACTIVE_TX = {"cancelled": {"$ne": True}}
 ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
 
 
@@ -51,7 +56,7 @@ def clean(doc):
     if isinstance(doc, list):
         return [clean(d) for d in doc]
     if isinstance(doc, dict):
-        return {k: clean(v) for k, v in doc.items() if k != "_id"}
+        return {k: clean(v) for k, v in doc.items() if k not in ("_id", "_stock_lock", "cancellation_receipts")}
     if isinstance(doc, datetime):
         if doc.tzinfo is None:
             doc = doc.replace(tzinfo=timezone.utc)
@@ -139,7 +144,7 @@ async def apply_stock_in(item_id: str, qty: int, user: dict, occurred_at: dateti
     return await record_transaction("IN", before, before["currentStock"] + qty, user, occurred_at, source=source, notes=notes)
 
 
-async def apply_stock_out(item_id: str, qty: int, user: dict, occurred_at: datetime, destination: str, incident_type: str, notes: str):
+async def apply_stock_out(item_id: str, qty: int, user: dict, occurred_at: datetime, destination: str, incident_type: str, notes: str, recipient_kk=None, recipient_jiwa=None):
     before = await db.items.find_one_and_update(
         {"id": item_id, "currentStock": {"$gte": qty}, "_stock_lock": {"$exists": False}}, {"$inc": {"currentStock": -qty}},
         projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
@@ -150,6 +155,7 @@ async def apply_stock_out(item_id: str, qty: int, user: dict, occurred_at: datet
     return await record_transaction(
         "OUT", before, before["currentStock"] - qty, user, occurred_at,
         destination=destination.strip(), incident_type=incident_type, notes=notes,
+        recipient_kk=recipient_kk, recipient_jiwa=recipient_jiwa,
     )
 
 
@@ -181,6 +187,9 @@ class StockOutBody(BaseModel):
     destination: str = Field(min_length=2, max_length=120)
     incident_type: str
     date: Optional[str] = None
+    time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    recipient_kk: Optional[int] = Field(default=None, ge=0, le=10000000, strict=True)
+    recipient_jiwa: Optional[int] = Field(default=None, ge=0, le=10000000, strict=True)
     notes: str = Field(default="", max_length=500)
 
 
@@ -207,36 +216,6 @@ class UserPatch(BaseModel):
 async def health():
     count = await db.items.count_documents({})
     return {"status": "ok", "items": count, "expected": EXPECTED_ITEM_COUNT, "time": now_utc().isoformat()}
-
-
-@api.get("/public/items")
-async def public_items():
-    items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
-    return [
-        {"id": i["id"], "name": i["name"], "category": i["category"], "categoryId": i["categoryId"],
-         "unit": i["unit"], "status": stock_status(i), "lastUpdated": clean(i.get("lastUpdated"))}
-        for i in items
-    ]
-
-
-@api.get("/public/summary")
-async def public_summary():
-    items = await db.items.find({}, {"_id": 0}).to_list(200)
-    categories = {}
-    status_counts = {"aman": 0, "menipis": 0, "habis": 0}
-    last = None
-    for i in items:
-        categories[i["category"]] = categories.get(i["category"], 0) + 1
-        status_counts[stock_status(i)] += 1
-        lu = i.get("lastUpdated")
-        if lu and (last is None or lu > last):
-            last = lu
-    return {
-        "total_items": len(items),
-        "status_counts": status_counts,
-        "categories": sorted([{"category": k, "count": v} for k, v in categories.items()], key=lambda c: (-c["count"], c["category"])),
-        "last_updated": clean(last),
-    }
 
 
 # ---------- auth ----------
@@ -280,7 +259,7 @@ async def incident_types(user=Depends(require_role(*STAFF))):
 
 @api.get("/meta/destinations")
 async def destinations(user=Depends(require_role(*STAFF))):
-    return await db.transactions.distinct("destination", {"type": "OUT"})
+    return await db.transactions.distinct("destination", {**ACTIVE_TX, "type": "OUT"})
 
 
 @api.patch("/items/{item_id}")
@@ -329,10 +308,10 @@ async def dashboard_stock(year: str = "2026", user=Depends(require_role(*STAFF))
         if stock_status(i) != "aman":
             c["low"] += 1
     low_items = [{**clean(i), "status": stock_status(i)} for i in items if stock_status(i) != "aman"]
-    recent = await db.transactions.find({}, {"_id": 0}).sort("created_at", -1).limit(8).to_list(8)
+    recent = await db.transactions.find(ACTIVE_TX, {"_id": 0}).sort("created_at", -1).limit(8).to_list(8)
     since = now_utc() - timedelta(days=7)
-    weekly = {"IN": 0, "OUT": 0, "ADJUSTMENT": 0}
-    async for tx in db.transactions.find({"created_at": {"$gte": since}}, {"type": 1}):
+    weekly = {"IN": 0, "OUT": 0, "ADJUSTMENT": 0, "REVERSAL": 0}
+    async for tx in db.transactions.find({**ACTIVE_TX, "created_at": {"$gte": since}}, {"_id": 0, "type": 1}):
         weekly[tx["type"]] = weekly.get(tx["type"], 0) + 1
     return {
         "year": "2026",
@@ -359,7 +338,7 @@ async def item_history_chart(item_id: str, user=Depends(require_role(*STAFF))):
 async def dashboard_distribution(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     start_dt, end_dt = date_range(start, end)
     txs = await db.transactions.find(
-        {"type": "OUT", "occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}
+        {**ACTIVE_TX, "type": "OUT", "occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}
     ).sort("occurred_at", -1).to_list(5000)
 
     per_item, per_dest, per_incident, per_day = {}, {}, {}, {}
@@ -409,7 +388,9 @@ async def stock_in(body: StockInBody, user=Depends(require_role(*WAREHOUSE))):
 async def stock_out(body: StockOutBody, user=Depends(require_role(*WAREHOUSE))):
     if body.incident_type not in INCIDENT_TYPES:
         raise HTTPException(status_code=400, detail="Jenis kejadian tidak valid")
-    return await apply_stock_out(body.item_id, body.quantity, user, occurred_at_from(body.date), body.destination, body.incident_type, body.notes.strip())
+    if len(body.destination.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Lokasi penyaluran wajib diisi.")
+    return await apply_stock_out(body.item_id, body.quantity, user, distribution_occurred_at(body.date, body.time), body.destination, body.incident_type, body.notes.strip(), body.recipient_kk, body.recipient_jiwa)
 
 
 @api.post("/transactions/adjust", status_code=201)
@@ -420,9 +401,13 @@ async def stock_adjust(body: AdjustBody, user=Depends(require_role(*STAFF))):
 @api.get("/transactions")
 async def list_transactions(
     type: Optional[str] = None, item_id: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None,
-    limit: int = Query(default=100, le=1000), user=Depends(require_role(*STAFF)),
+    status: str = "active", limit: int = Query(default=100, ge=1, le=1000), user=Depends(require_role(*STAFF)),
 ):
-    q = {}
+    if status not in ("active", "cancelled", "all"):
+        raise HTTPException(422, "Status transaksi tidak valid.")
+    if status != "active" and user["role"] != ROLE_ADMIN:
+        raise HTTPException(403, "Riwayat pembatalan hanya dapat dilihat admin.")
+    q = dict(ACTIVE_TX) if status == "active" else {"cancelled": True} if status == "cancelled" else {}
     if type:
         q["type"] = type
     if item_id:
@@ -452,7 +437,7 @@ def fmt_dt(v):
 
 
 STATUS_LABEL = {"aman": "Aman", "menipis": "Menipis", "habis": "Habis"}
-TYPE_LABEL = {"IN": "Barang Masuk", "OUT": "Penyaluran", "ADJUSTMENT": "Koreksi"}
+TYPE_LABEL = {"IN": "Barang Masuk", "OUT": "Penyaluran", "ADJUSTMENT": "Koreksi", "REVERSAL": "Pembatalan"}
 
 
 def pdf_response(content: bytes, filename: str):
@@ -502,7 +487,7 @@ async def export_stock_pdf(user=Depends(require_role(*STAFF))):
 async def export_distribution(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     data = await dashboard_distribution(start, end, user)
     meta = [("Periode", f"{data['range']['start']} s/d {data['range']['end']}"), ("Dicetak", now_wita()), ("Oleh", user["name"] or user["email"])]
-    txs = await db.transactions.find({"type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
+    txs = await db.transactions.find({**ACTIVE_TX, "type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
     content = build_workbook([
         {"name": "Per Item", "title": "Laporan Penyaluran per Item", "meta": meta,
          "headers": ["Nama Item", "Kategori", "Total Disalurkan", "Satuan", "Jumlah Transaksi"],
@@ -521,7 +506,7 @@ async def export_distribution(start: Optional[str] = None, end: Optional[str] = 
 async def export_distribution_pdf(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     data = await dashboard_distribution(start, end, user)
     meta = [("Periode", f"{data['range']['start']} s/d {data['range']['end']}"), ("Dicetak", now_wita())]
-    txs = await db.transactions.find({"type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
+    txs = await db.transactions.find({**ACTIVE_TX, "type": "OUT", "occurred_at": {"$gte": parse_date(data["range"]["start"]), "$lt": parse_date(data["range"]["end"], end=True)}}, {"_id": 0}).sort("occurred_at", -1).to_list(5000)
     content = build_pdf_report(
         "LAPORAN PENYALURAN LOGISTIK BENCANA",
         [
@@ -540,7 +525,7 @@ async def export_distribution_pdf(start: Optional[str] = None, end: Optional[str
 @api.get("/export/transactions")
 async def export_transactions(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     start_dt, end_dt = date_range(start, end)
-    txs = await db.transactions.find({"occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}).sort("occurred_at", -1).to_list(10000)
+    txs = await db.transactions.find({**ACTIVE_TX, "occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}).sort("occurred_at", -1).to_list(10000)
     rows = [[fmt_dt(t["occurred_at"]), TYPE_LABEL.get(t["type"], t["type"]), t["item_name"], t["previous_quantity"], t["new_quantity"], t["change_quantity"], t["unit"],
              t.get("source") or t.get("destination") or "", t.get("incident_type", ""), t.get("reason", ""), t["user_name"], t.get("notes", "")] for t in txs]
     content = build_workbook([{
@@ -555,7 +540,7 @@ async def export_transactions(start: Optional[str] = None, end: Optional[str] = 
 @api.get("/export/transactions/pdf")
 async def export_transactions_pdf(start: Optional[str] = None, end: Optional[str] = None, user=Depends(require_role(*STAFF))):
     start_dt, end_dt = date_range(start, end)
-    txs = await db.transactions.find({"occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}).sort("occurred_at", -1).to_list(10000)
+    txs = await db.transactions.find({**ACTIVE_TX, "occurred_at": {"$gte": start_dt, "$lt": end_dt}}, {"_id": 0}).sort("occurred_at", -1).to_list(10000)
     rows = [[fmt_dt(t["occurred_at"]), TYPE_LABEL.get(t["type"], t["type"]), t["item_name"], t["previous_quantity"], t["new_quantity"],
              t["change_quantity"], t["unit"], t.get("source") or t.get("destination") or "", t["user_name"]] for t in txs]
     content = build_pdf_report(
@@ -642,6 +627,9 @@ async def patch_user(user_id: str, body: UserPatch, user=Depends(require_role(RO
 
 app.include_router(api)
 app.include_router(management_router)
+app.include_router(public_catalog_router)
+app.include_router(public_distribution_router)
+app.include_router(admin_actions_router)
 
 
 @app.middleware("http")
@@ -709,9 +697,13 @@ async def startup():
     await db.items.create_index("name_key", unique=True, sparse=True)
     await db.transactions.create_index([("occurred_at", -1)])
     await db.transactions.create_index("type")
+    await db.transactions.create_index("transaction_id", unique=True)
+    await db.admin_audit.create_index("audit_id", unique=True)
+    await db.transactions.create_index([("type", 1), ("occurred_at", -1)])
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
     await seed_local_admin(db)
+    await reconcile_cancellations(db)
 
     version_doc = await db.meta.find_one({"key": "catalog_version"})
     if not version_doc or version_doc.get("value") != CATALOG_VERSION:

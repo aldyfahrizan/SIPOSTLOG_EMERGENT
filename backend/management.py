@@ -10,7 +10,10 @@ from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 from admin_login import UserResponse
+from account_limits import MAX_USERS, insert_user_with_limit
 from auth import public_user, require_role
+from admin_actions import ReasonBody, ActionResult, audit_record, finalize_cancellation
+from stock_lock import reserve_stock
 
 router = APIRouter(prefix="/api")
 
@@ -44,6 +47,18 @@ class ResetPasswordBody(BaseModel):
     password: str = Field(min_length=6, max_length=72)
 
 
+class UserCapacityResponse(BaseModel):
+    total: int
+    limit: int
+    remaining: int
+
+
+@router.get("/users/capacity", response_model=UserCapacityResponse)
+async def user_capacity(request: Request, user=Depends(require_role("admin"))):
+    total = await request.app.state.db.users.count_documents({})
+    return {"total": total, "limit": MAX_USERS, "remaining": max(0, MAX_USERS - total)}
+
+
 async def password_hash(value):
     if len(value.encode()) > 72:
         raise HTTPException(400, "Kata sandi maksimal 72 byte.")
@@ -70,15 +85,23 @@ async def create_item(body: ItemBody, request: Request, user=Depends(require_rol
     return {**item, "status": "habis" if not item["currentStock"] else "menipis" if item["currentStock"] <= item["minThreshold"] else "aman"}
 
 
-@router.delete("/items/{item_id}")
-async def delete_item(item_id: str, request: Request, user=Depends(require_role("admin", "petugas"))):
+@router.delete("/items/{item_id}", response_model=ActionResult)
+async def delete_item(item_id: str, body: ReasonBody, request: Request, user=Depends(require_role("admin"))):
     db = request.app.state.db
-    item = await db.items.find_one_and_delete({"id": item_id, "currentStock": 0, "_stock_lock": {"$exists": False}}, projection={"_id": 0})
-    if not item:
-        existing = await db.items.find_one({"id": item_id}, {"_id": 0, "id": 1})
-        raise HTTPException(409 if existing else 404, "Barang harus memiliki stok nol dan tidak sedang diproses sebelum dihapus." if existing else "Barang tidak ditemukan.")
-    await db.catalog_audit.insert_one({"action": "DELETE", "item_id": item_id, "snapshot": item, "user_id": user["user_id"], "at": datetime.now(timezone.utc)})
-    return {"ok": True, "item_id": item_id, "message": "Barang dihapus dari katalog; riwayat tetap tersimpan."}
+    if not await db.items.find_one({"id": item_id}, {"_id": 0, "id": 1}):
+        raise HTTPException(404, "Barang tidak ditemukan.")
+    async with reserve_stock(db, [{"item_id": item_id}]) as reserved:
+        item = reserved[item_id]
+        if item["currentStock"] != 0:
+            raise HTTPException(409, "Stok barang harus nol. Selesaikan pembatalan atau koreksi stok sebelum menghapus barang.")
+        for cancellation in item.get("cancellation_receipts", []):
+            await finalize_cancellation(db, cancellation)
+        receipt = audit_record("item", item_id, item["name"], body, user)
+        await db.catalog_audit.update_one({"audit_id": receipt["audit_id"]}, {"$setOnInsert": {**receipt, "snapshot": item, "state": "prepared"}}, upsert=True)
+        await db.items.delete_one({"id": item_id, "currentStock": 0})
+        await db.admin_audit.update_one({"audit_id": receipt["audit_id"]}, {"$setOnInsert": receipt}, upsert=True)
+        await db.catalog_audit.update_one({"audit_id": receipt["audit_id"]}, {"$set": {"state": "completed"}})
+    return {"ok": True, "audit_id": receipt["audit_id"], "message": "Barang dihapus dari katalog. Riwayat dan alasan penghapusan tetap tersimpan."}
 
 
 @router.post("/users", response_model=UserResponse, status_code=201)
@@ -90,10 +113,7 @@ async def create_user(body: CreateUserBody, request: Request, user=Depends(requi
            "email": f"{username}@sipostlog.local", "name": body.name.strip(), "picture": "",
            "password_hash": await password_hash(body.password), "auth_method": "password", "role": body.role,
            "active": True, "created_at": datetime.now(timezone.utc), "last_login": None, "created_by": user["user_id"]}
-    try:
-        await request.app.state.db.users.insert_one(dict(doc))
-    except DuplicateKeyError:
-        raise HTTPException(409, "Username sudah digunakan.")
+    await insert_user_with_limit(request.app.state.db, doc)
     return public_user(doc)
 
 

@@ -15,6 +15,8 @@ import AdjustPage from "./pages/AdjustPage";
 import HistoryPage from "./pages/HistoryPage";
 import ExcelPage from "./pages/ExcelPage";
 import UsersPage from "./pages/UsersPage";
+import ItemsPage from "./pages/ItemsPage";
+import AuditPage from "./pages/AuditPage";
 
 function AppRouter() {
   const location = useLocation();
@@ -34,6 +36,8 @@ function AppRouter() {
         <Route path="riwayat" element={<HistoryPage />} />
         <Route path="excel" element={<ExcelPage />} />
         <Route path="pengguna" element={<ProtectedRoute adminOnly><UsersPage /></ProtectedRoute>} />
+        <Route path="barang" element={<ProtectedRoute adminOnly><ItemsPage /></ProtectedRoute>} />
+        <Route path="audit" element={<ProtectedRoute adminOnly><AuditPage /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

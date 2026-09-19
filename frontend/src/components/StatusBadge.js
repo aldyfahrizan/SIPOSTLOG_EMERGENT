@@ -30,6 +30,7 @@ const TYPE_STYLE = {
   IN: "bg-sky-500/15 text-sky-300 border-sky-500/30",
   OUT: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   ADJUSTMENT: "bg-violet-500/15 text-violet-300 border-violet-500/30",
+  REVERSAL: "bg-slate-100 text-slate-600 border-slate-300",
 };
 
 export function TypeBadge({ type }) {

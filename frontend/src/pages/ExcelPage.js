@@ -5,6 +5,7 @@ import { API, downloadFile, errorMessage } from "../lib/api";
 import { PageHeader, Panel } from "../components/StatCard";
 import DateRangePicker from "../components/DateRangePicker";
 import { fmtNum, todayYMD } from "../lib/format";
+import { CancelTransactionButton } from "../components/AdminDeleteControls";
 
 function ExportCard({ icon: Icon, title, desc, onDownload, onPdf, busyKey, busy, testId }) {
   return (
@@ -84,7 +85,7 @@ export default function ExcelPage() {
                 <div className="rounded-lg bg-ink-900/60 border border-ink-700 p-3"><div className="num text-2xl font-bold text-slate-200">{importResult.unchanged}</div><div className="text-[11px] uppercase tracking-wider text-slate-400">Tidak berubah</div></div>
                 <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-3"><div className="num text-2xl font-bold text-red-400">{importResult.errors.length}</div><div className="text-[11px] uppercase tracking-wider text-slate-400">Galat</div></div>
               </div>
-              {importResult.updated.length > 0 && <ul className="divide-y divide-ink-700/60">{importResult.updated.map((t) => <li key={t.transaction_id} className="flex items-center justify-between gap-2 py-2 text-sm"><span className="flex items-center gap-2 text-slate-200"><CheckCircle2 size={14} className="text-emerald-400" />{t.item_name}</span><span className="num text-xs text-slate-400">{fmtNum(t.previous_quantity)} → <b className="text-white">{fmtNum(t.new_quantity)}</b> {t.unit}</span></li>)}</ul>}
+              {importResult.updated.length > 0 && <ul className="divide-y divide-ink-700/60">{importResult.updated.map((t) => <li key={t.transaction_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm" data-testid={`import-result-${t.transaction_id}`}><span className="flex items-center gap-2 text-slate-200"><CheckCircle2 size={14} className="text-emerald-400" />{t.item_name}</span><span className="num text-xs text-slate-400">{fmtNum(t.previous_quantity)} → <b className="text-white">{fmtNum(t.new_quantity)}</b> {t.unit}</span>{t.cancelled ? <span data-testid={`import-cancelled-${t.transaction_id}`} className="text-xs text-red-700">Dibatalkan</span> : <CancelTransactionButton transaction={t} onCancelled={() => setImportResult((result) => ({ ...result, updated: result.updated.map((row) => row.transaction_id === t.transaction_id ? { ...row, cancelled: true } : row) }))} />}</li>)}</ul>}
               {importResult.errors.length > 0 && <ul className="space-y-1">{importResult.errors.map((e, i) => <li key={i} className="flex items-center gap-2 text-xs text-red-300"><AlertCircle size={13} /> {e.item_id}: {e.error}</li>)}</ul>}
             </div>
           )}

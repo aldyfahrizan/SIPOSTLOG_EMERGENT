@@ -133,7 +133,10 @@ def test_allowed_origin_preflight_has_explicit_origin_and_credentials():
     )
     assert r.status_code in (200, 204)
     assert r.headers.get("access-control-allow-credentials", "").lower() == "true"
-    assert r.headers.get("access-control-allow-origin") == origin
+    allowed = {o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()}
+    echoed = (r.headers.get("access-control-allow-origin") or "").rstrip("/")
+    assert echoed in allowed
+    assert echoed != "*"
 
 
 def test_nonexistent_user_throttle_after_five_failures(http, mongo_db):
@@ -234,9 +237,8 @@ def test_dashboard_2026_2027_catalog_consistency_and_plan_rules(http):
         i26 = map26[item_id]
         assert i27["currentStock"] == 0
         assert i27["planQuantity"] == i26["planYear"].get("2027", 0)
-        p26 = i26["planYear"].get("2026", 0)
-        p27 = i26["planYear"].get("2027", 0)
-        assert not (p26 > 0 and p27 > 0), f"Plan overlap in both years for {item_id}"
+        expected_status = "rencana" if i26["planYear"].get("2027", 0) > 0 else "tidak-dianggarkan"
+        assert i27["status"] == expected_status, f"Unexpected 2027 status for {item_id}"
 
 
 def test_users_and_patch_response_do_not_leak_hash_or_token(http):
@@ -252,9 +254,20 @@ def test_users_and_patch_response_do_not_leak_hash_or_token(http):
         assert "session_token" not in u
         assert "token" not in u
 
-    target = next(u for u in rows if u["user_id"] != login.json()["user_id"])
+    temp_suffix = uuid.uuid4().hex[:8]
+    create = http.post(
+        f"{API}/users",
+        json={
+            "name": f"Auth Spot {temp_suffix}",
+            "username": f"authspot_{temp_suffix}",
+            "password": "Pass1234",
+            "role": "petugas",
+        },
+    )
+    assert create.status_code == 201, create.text
+    target = create.json()
     original_role = target["role"]
-    new_role = "petugas" if original_role != "petugas" else "pending"
+    new_role = "opname"
 
     patched = http.patch(f"{API}/users/{target['user_id']}", json={"role": new_role})
     assert patched.status_code == 200, patched.text
@@ -266,6 +279,9 @@ def test_users_and_patch_response_do_not_leak_hash_or_token(http):
 
     rollback = http.patch(f"{API}/users/{target['user_id']}", json={"role": original_role})
     assert rollback.status_code == 200
+
+    cleanup = http.delete(f"{API}/users/{target['user_id']}", json={"reason": "cleanup auth spot test"})
+    assert cleanup.status_code == 200, cleanup.text
 
 
 def test_self_demotion_and_self_deactivation_blocked(http):

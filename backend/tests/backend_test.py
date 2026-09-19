@@ -7,9 +7,12 @@ import io
 import os
 import pytest
 import requests
+from dotenv import load_dotenv
 from openpyxl import load_workbook, Workbook
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://logistics-hub-1573.preview.emergentagent.com").rstrip("/")
+load_dotenv("/app/frontend/.env", override=False)
+
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_TOKEN = "test_session_admin_001"
@@ -44,10 +47,13 @@ def test_public_items_no_leak(s):
     assert r.status_code == 200
     items = r.json()
     assert len(items) == EXPECTED_COUNT
-    banned = {"currentStock", "minThreshold", "current_stock", "min_threshold"}
+    banned = {
+        "currentStock", "minThreshold", "current_stock", "min_threshold",
+        "status", "status_counts", "stock", "quantity",
+    }
     for it in items:
         assert not (banned & set(it.keys())), f"leak: {it}"
-        assert it["status"] in {"aman", "menipis", "habis"}
+        assert set(it.keys()) == {"id", "name", "category", "unit"}
 
 
 def test_public_summary_no_leak(s):
@@ -55,7 +61,10 @@ def test_public_summary_no_leak(s):
     assert r.status_code == 200
     data = r.json()
     assert data["total_items"] == EXPECTED_COUNT
-    assert set(data["status_counts"].keys()) == {"aman", "menipis", "habis"}
+    assert "status_counts" not in data
+    assert "status" not in data
+    assert isinstance(data["categories"], list)
+    assert all(set(c.keys()) == {"category", "count"} for c in data["categories"])
     # Ensure whole payload doesn't include stock fields
     assert "currentStock" not in r.text
     assert "minThreshold" not in r.text
@@ -305,8 +314,11 @@ def test_users_role_toggle_and_reset(s):
     # restore pending session (patch to pending deletes sessions)
     import pymongo
     from datetime import datetime, timedelta, timezone
-    mc = pymongo.MongoClient(os.environ.get("MONGO_URL", "mongodb://localhost:27017"))
-    db = mc[os.environ.get("DB_NAME", "sipostlog")]
+    mongo_url = os.environ.get("MONGO_URL")
+    db_name = os.environ.get("DB_NAME")
+    assert mongo_url and db_name, "MONGO_URL and DB_NAME must be configured"
+    mc = pymongo.MongoClient(mongo_url)
+    db = mc[db_name]
     db.user_sessions.update_one(
         {"session_token": "test_session_pending_001"},
         {"$set": {

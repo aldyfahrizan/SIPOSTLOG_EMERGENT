@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { ArrowDownToLine, ArrowUpFromLine, BarChart3, ClipboardCheck, FileSpreadsheet, History, LogOut, Menu, Package, Truck, Users, X, Globe } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, BarChart3, ClipboardCheck, FileSpreadsheet, History, LogOut, Menu, Package, PackagePlus, Truck, Users, X, Globe, Archive } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Brand } from "./Logos";
 import { ROLE_LABEL } from "../lib/format";
@@ -16,6 +16,8 @@ const NAV = [
   { to: "/app/riwayat", label: "Riwayat Transaksi", icon: History, id: "riwayat" },
   { to: "/app/excel", label: "Ekspor & Impor Excel", icon: FileSpreadsheet, id: "excel" },
   { to: "/app/pengguna", label: "Kelola Pengguna", icon: Users, id: "pengguna", admin: true },
+  { to: "/app/barang", label: "Kelola Barang", icon: PackagePlus, id: "barang", admin: true },
+  { to: "/app/audit", label: "Riwayat Penghapusan", icon: Archive, id: "audit", admin: true },
 ];
 
 function Sidebar({ onNavigate }) {

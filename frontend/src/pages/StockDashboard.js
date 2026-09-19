@@ -9,6 +9,8 @@ import { StatusBadge, TypeBadge } from "../components/StatusBadge";
 import Plan2027View from "../components/Plan2027View";
 import ItemTrendModal from "../components/ItemTrendModal";
 import { fmtDateTime, fmtNum } from "../lib/format";
+import { CancelTransactionButton, DeleteEntityButton } from "../components/AdminDeleteControls";
+import { useAuth } from "../context/AuthContext";
 
 const PALETTE = ["#F59E0B", "#38BDF8", "#34D399", "#F472B6", "#A78BFA", "#FB923C", "#22D3EE", "#E879F9", "#84CC16", "#F87171", "#94A3B8"];
 
@@ -26,6 +28,7 @@ function YearToggle({ year, onChange }) {
 }
 
 export default function StockDashboard() {
+  const { isAdmin } = useAuth();
   const [year, setYear] = useState("2026");
   const [data, setData] = useState(null);
   const [q, setQ] = useState("");
@@ -34,6 +37,7 @@ export default function StockDashboard() {
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [printing, setPrinting] = useState(false);
+  useEffect(() => { const refresh = () => setRetry((value) => value + 1); window.addEventListener("sipostlog:stock-changed", refresh); return () => window.removeEventListener("sipostlog:stock-changed", refresh); }, []);
 
   useEffect(() => {
     let active = true;
@@ -75,7 +79,7 @@ export default function StockDashboard() {
         <StatCard testId="stat-total-items" label="Jenis Item" value={data.total_items} sub="dalam katalog logistik" accent="slate" icon={Package} />
         <StatCard testId="stat-safe-items" label="Aman" value={data.status_counts.aman} sub="di atas ambang minimum" accent="green" />
         <StatCard testId="stat-low-items" label="Menipis / Habis" value={low} sub="perlu tindak lanjut" accent={low ? "red" : "green"} icon={AlertTriangle} />
-        <StatCard testId="stat-weekly-activity" label="Transaksi 7 Hari" value={data.weekly_activity.IN + data.weekly_activity.OUT + data.weekly_activity.ADJUSTMENT} sub={`${data.weekly_activity.IN} masuk · ${data.weekly_activity.OUT} salur · ${data.weekly_activity.ADJUSTMENT} koreksi`} accent="blue" icon={ClipboardCheck} />
+        <StatCard testId="stat-weekly-activity" label="Transaksi 7 Hari" value={data.weekly_activity.IN + data.weekly_activity.OUT + data.weekly_activity.ADJUSTMENT + (data.weekly_activity.REVERSAL || 0)} sub={`${data.weekly_activity.IN} masuk · ${data.weekly_activity.OUT} salur · ${data.weekly_activity.ADJUSTMENT} koreksi · ${data.weekly_activity.REVERSAL || 0} batal`} accent="blue" icon={ClipboardCheck} />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -124,7 +128,7 @@ export default function StockDashboard() {
                     <td className="text-right num text-slate-400">{fmtNum(i.minThreshold)}</td>
                     <td><StatusBadge status={i.status} testId={`stock-status-${i.id}`} /></td>
                     <td className="text-xs text-slate-500 whitespace-nowrap">{fmtDateTime(i.lastUpdated)}</td>
-                    <td className="text-right"><button data-testid={`stock-trend-button-${i.id}`} title={`Tren stok ${i.name}`} onClick={(e) => { e.stopPropagation(); setTrendItem(i.id); }} className="rounded-lg p-2 text-brand-blue hover:bg-blue-50 transition-colors"><TrendingUp size={15} /></button></td>
+                    <td className="text-right"><div className="flex justify-end gap-1"><button data-testid={`stock-trend-button-${i.id}`} title={`Tren stok ${i.name}`} onClick={(e) => { e.stopPropagation(); setTrendItem(i.id); }} className="rounded-lg p-2 text-brand-blue hover:bg-blue-50 transition-colors"><TrendingUp size={15} /></button>{isAdmin && <DeleteEntityButton kind="item" entity={i} disabled={i.currentStock !== 0} disabledReason={i.currentStock !== 0 ? "Stok harus nol sebelum barang dihapus" : ""} />}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -141,6 +145,7 @@ export default function StockDashboard() {
                   <div className="mt-2 text-sm font-semibold text-white truncate">{t.item_name}</div>
                   <div className="text-xs text-slate-400 num">{fmtNum(t.previous_quantity)} → <span className="text-white font-bold">{fmtNum(t.new_quantity)}</span> {t.unit} <span className={t.change_quantity >= 0 ? "text-emerald-400" : "text-amber-400"}>({t.change_quantity > 0 ? "+" : ""}{fmtNum(t.change_quantity)})</span></div>
                   <div className="text-[11px] text-slate-500 mt-1 truncate">{t.destination || t.source || t.reason} · {t.user_name}</div>
+                  {isAdmin && <div className="mt-2"><CancelTransactionButton transaction={t} /></div>}
                 </li>
               ))}
             </ul>
