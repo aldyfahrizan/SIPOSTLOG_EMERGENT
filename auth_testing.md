@@ -1,5 +1,15 @@
 # SIPOSTLOG — panduan pengujian autentikasi
 
+## Regresi prioritas — penolakan Origin (19 September 2026)
+- Gejala yang direproduksi melalui browser: admin/admin mendapat 403 `Asal permintaan tidak diizinkan`.
+- Penyebab terkonfirmasi dalam log: proxy meneruskan Origin `https://logistics-hub-1573.cluster-12.preview.emergentcf.cloud`, sedangkan CORS_ORIGINS hanya memuat `https://logistics-hub-1573.preview.emergentagent.com`.
+- Kedua alamat aplikasi kini ada pada allowlist eksplisit backend/.env. Middleware Origin dan CORSMiddleware memakai ALLOWED_ORIGINS yang sama; regex lintas proyek dihapus.
+- Verifikasi login admin/admin dari URL eksternal, /auth/me, reload dashboard, logout, dan penolakan cookie lama sesudah logout.
+- Verifikasi kedua Origin yang dikonfigurasi serta Origin asing melalui TestClient atau koneksi internal yang tidak menulis ulang header Origin. Pengujian browser/API utama tetap melalui REACT_APP_BACKEND_URL.
+- Jangan menonaktifkan perlindungan Origin, menambahkan wildcard, menghapus stok, atau mereset database untuk memperbaiki login.
+- Alias POST /api/auth/login memakai handler yang sama dengan /api/auth/admin/login.
+- Pembatasan masuk memakai SHA-256 dari username yang sudah dinormalisasi, bukan IP proxy. Penghitung direservasi atomik sebelum verifikasi bcrypt; percobaan keenam harus 429. Login berhasil menghapus penghitung akun itu saja. Pembersihan pengujian hanya untuk identifier akun uji, bukan seluruh login_attempts.
+
 ## Konfigurasi
 - Baca `/app/memory/test_credentials.md`. Login lokal username admin/password admin di POST `/api/auth/admin/login`.
 - URL eksternal hanya dari frontend/.env REACT_APP_BACKEND_URL; MongoDB hanya dari backend/.env MONGO_URL + DB_NAME.

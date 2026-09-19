@@ -9,7 +9,7 @@ import pytest
 import requests
 from openpyxl import load_workbook, Workbook
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://0624bff4-b80e-4adc-ba42-3a8e6aa97eb4.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://logistics-hub-1573.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_TOKEN = "test_session_admin_001"
@@ -428,7 +428,7 @@ def test_pdf_export_pending_forbidden(s):
 # ---------- new: CORS regex ----------
 def test_cors_preflight_no_wildcard_with_credentials(s):
     # simulate preview subdomain
-    origin = "https://preview-test.preview.emergentagent.com"
+    origin = "https://logistics-hub-1573.preview.emergentagent.com"
     r = s.options(f"{API}/auth/session", headers={
         "Origin": origin,
         "Access-Control-Request-Method": "POST",

@@ -1,25 +1,27 @@
 {
   "project_name": "Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)",
-  "app_type": "Government Hybrid Stock Opname & Public Monitoring Portal",
+  "app_type": "dashboard",
   "archetype": "SIKD Bright Civic Minimalist (Light Mode)",
   "theme_strategy": {
     "mode": "Light",
-    "background": "Light Slate (#F8FAFC) & Pure White (#FFFFFF)",
-    "primary_header": "Deep Civic Navy (#1E3A8A)",
-    "accent": "Energetic SIKD Orange (#C2410C)",
-    "rule": "Strictly NO dark/black default theme. All dark panels replaced with bright, crisp white cards with subtle slate borders (#E2E8F0)."
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "primary": "#1E3A8A",
+    "accent": "#C2410C",
+    "border": "#E2E8F0",
+    "rule": "Preserve existing light civic aesthetic. Use crisp white cards, slate borders, deep navy headers, and orange active accents. Avoid dark backgrounds."
   },
   "typography": {
-    "font_family_display": "Plus Jakarta Sans, sans-serif",
-    "font_family_body": "Manrope, sans-serif",
-    "font_family_mono": "JetBrains Mono, monospace",
-    "styles": {
+    "font_display": "Plus Jakarta Sans, sans-serif",
+    "font_body": "Manrope, sans-serif",
+    "font_mono": "JetBrains Mono, monospace",
+    "hierarchy": {
       "h1": "text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900",
       "h2": "text-xl sm:text-2xl font-bold tracking-tight text-slate-900",
       "h3": "text-lg sm:text-xl font-semibold text-slate-900",
       "body": "text-sm sm:text-base text-slate-600 leading-relaxed",
-      "labels": "text-xs font-bold uppercase tracking-wider text-slate-500",
-      "numbers": "font-mono tabular-nums font-semibold text-slate-900"
+      "label": "text-xs font-bold uppercase tracking-wider text-slate-500",
+      "mono_numbers": "font-mono tabular-nums font-semibold text-slate-900"
     }
   },
   "color_palette": {
@@ -27,61 +29,155 @@
     "primary_navy_hover": "#1D4ED8",
     "accent_orange": "#C2410C",
     "accent_orange_hover": "#EA580C",
-    "canvas_bg": "#F8FAFC",
-    "surface_white": "#FFFFFF",
+    "bg_slate": "#F8FAFC",
+    "card_white": "#FFFFFF",
     "border_light": "#E2E8F0",
     "border_focus": "#C2410C",
-    "text_main": "#0F172A",
-    "text_muted": "#64748B",
+    "text_primary": "#0F172A",
+    "text_secondary": "#64748B",
     "status_emerald": "#059669",
     "status_amber": "#D97706",
     "status_rose": "#DC2626",
     "status_blue": "#2563EB"
   },
-  "top_bar_navigation": {
-    "sticky": true,
-    "background_class": "bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm sticky top-0 z-50",
-    "app_title": "Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)",
-    "logos": [
-      "/logo/kab-banjar.png",
-      "/logo/bpbd-banjar.png"
-    ],
-    "admin_login_trigger": {
-      "label": "Masuk Admin",
-      "style": "bg-navy-800 text-white hover:bg-navy-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all shadow-sm",
-      "data_testid": "top-bar-admin-login-button"
-    }
-  },
-  "admin_login": {
-    "access_point": "Top Bar Admin Modal / Page",
-    "credentials": {
+  "auth_login_system": {
+    "admin_login_credentials": {
       "username": "admin",
       "password": "admin"
     },
-    "security_ui_rules": [
-      "Password input field MUST use type='password' to conceal input text.",
-      "DO NOT show password hints or text anywhere on screen or inside login modal."
+    "login_endpoint": "/api/auth/login",
+    "user_roles": [
+      { "key": "admin", "label": "Administrator Super" },
+      { "key": "petugas_gudang", "label": "Petugas Gudang" },
+      { "key": "tim_stock_opname", "label": "Tim Stock Opname" }
+    ],
+    "login_form_requirements": [
+      "Ensure username 'admin' and password 'admin' authenticates successfully.",
+      "Input field for password MUST use type='password'.",
+      "Include data-testid='login-username-input', data-testid='login-password-input', and data-testid='login-submit-button'."
     ]
   },
-  "public_stock_view": {
-    "qualitative_status": true,
-    "qualitative_labels": {
-      "SANGAT_CUKUP": "Sangat Cukup (Tersedia Melimpah)",
-      "CUKUP": "Cukup (Aman & Siap Salur)",
-      "MENIPIS": "Menipis (Perlu Pengadaan)",
-      "KRITIS": "Kritis (Stok Sangat Terbatas)"
+  "routes_and_navigation": [
+    {
+      "path": "/app/barang",
+      "label": "Kelola Barang",
+      "icon": "Package",
+      "data_testid": "internal-sidebar-nav-barang",
+      "purpose": "Tambah barang baru, edit rincian barang, dan hapus barang dari inventaris."
     },
-    "widgets": [
-      "Animated Stock Readiness Gauge Metric",
-      "Category Summary Tiles (Bahan Pangan, Sandang, Peralatan Evakuasi, Kesehatan)",
-      "Search & Category/Condition Filter Bar"
-    ]
+    {
+      "path": "/app/berita-acara",
+      "label": "Berita Acara Penyaluran",
+      "icon": "FileText",
+      "data_testid": "internal-sidebar-nav-berita-acara",
+      "purpose": "Pembuatan dan cetak dokumen resmi Berita Acara Penyaluran Logistik secara otomatis dengan penomoran unik."
+    },
+    {
+      "path": "/app/impor-ai",
+      "label": "Stock Opname AI",
+      "icon": "Sparkles",
+      "data_testid": "internal-sidebar-nav-impor-ai",
+      "purpose": "Upload file Excel stock opname dengan pemetaan kolom AI (AI header mapping), pratinjau data, dan konfirmasi pembaruan otomatis."
+    },
+    {
+      "path": "/app/pengguna",
+      "label": "Kelola Pengguna",
+      "icon": "Users",
+      "data_testid": "internal-sidebar-nav-pengguna",
+      "admin_only": true,
+      "purpose": "Tambah dan atur akun pengguna berdasarkan tugas (Admin, Petugas Gudang, Tim Stock Opname)."
+    },
+    {
+      "path": "/app/barang-masuk",
+      "label": "Catat Barang Masuk",
+      "icon": "ArrowDownToLine",
+      "data_testid": "internal-sidebar-nav-barang-masuk",
+      "purpose": "Pencatatan manual transaksi barang masuk oleh Petugas Gudang."
+    },
+    {
+      "path": "/app/catat-penyaluran",
+      "label": "Catat Penyaluran",
+      "icon": "Truck",
+      "data_testid": "internal-sidebar-nav-catat-penyaluran",
+      "purpose": "Pencatatan manual penyaluran logistik bencana oleh Petugas Gudang."
+    }
+  ],
+  "components_specification": {
+    "item_management": {
+      "path": "frontend/src/pages/ItemsManagementPage.js",
+      "data_testids": [
+        "item-add-button",
+        "item-name-input",
+        "item-category-select",
+        "item-unit-input",
+        "item-min-stock-input",
+        "item-save-button",
+        "item-delete-button-",
+        "item-search-input"
+      ]
+    },
+    "berita_acara": {
+      "path": "frontend/src/pages/BeritaAcaraPage.js",
+      "features": [
+        "Auto-generated document serial number (e.g. BAP/BPBD/2026/001)",
+        "Form input for recipient (penerima), location (lokasi bencana), disaster event (kejadian bencana), and distribution date",
+        "Multi-item table selector with quantity input",
+        "Printable formatted view (A4 layout print preview / PDF generate)"
+      ],
+      "data_testids": [
+        "ba-number-input",
+        "ba-recipient-input",
+        "ba-location-input",
+        "ba-event-input",
+        "ba-add-item-button",
+        "ba-generate-print-button"
+      ]
+    },
+    "excel_ai_import": {
+      "path": "frontend/src/pages/AiStockOpnamePage.js",
+      "features": [
+        "Drag & drop or file selector for Excel (.xlsx, .xls)",
+        "AI column detection header mapping preview (Kode Barang, Nama Barang, Stok Fisik, Kondisi, Catatan)",
+        "Diff preview confirmation dialog showing changes (Old stock vs New AI mapped stock)",
+        "Commit stock opname update action button"
+      ],
+      "data_testids": [
+        "ai-excel-file-input",
+        "ai-excel-analyze-button",
+        "ai-excel-mapping-preview",
+        "ai-excel-confirm-update-button"
+      ]
+    },
+    "user_management": {
+      "path": "frontend/src/pages/UsersPage.js",
+      "features": [
+        "Form create user (Username, Nama Lengkap, Password, Peran/Role)",
+        "List of existing users with role badges",
+        "Reset password or delete user trigger"
+      ],
+      "data_testids": [
+        "user-create-username-input",
+        "user-create-name-input",
+        "user-create-password-input",
+        "user-create-role-select",
+        "user-create-submit-button"
+      ]
+    }
   },
   "instructions_to_main_agent": [
-    "Refactor AppShell.js and PublicPage.js to strictly use bright SIKD colors (#1E3A8A navy, #C2410C orange accent, white background).",
-    "Ensure top bar displays full name 'Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)' alongside Kab Banjar and BPBD logos.",
-    "Add 'Masuk Admin' action on top bar that opens admin login modal with username 'admin' and concealed password ('type=password').",
-    "Remove any visible password text or hints from the UI.",
-    "Ensure all interactive elements have data-testid attributes for automated testing."
+    "1. FIX LOGIN BUG: Ensure admin backend login recognizes username 'admin' with password 'admin'. Fix any auth hash or query mismatch.",
+    "2. INVENTORY MANAGEMENT (/app/barang): Create full CRUD page to add, edit, search, and delete logistik items (Penambahan & Penghapusan Barang).",
+    "3. AUTOMATED BERITA ACARA (/app/berita-acara): Build automated Berita Acara Penyaluran generator with auto-numbering, multi-item table selection, and print-ready document view.",
+    "4. AI EXCEL STOCK OPNAME (/app/impor-ai): Create Excel upload flow where backend/AI parses column headers, renders preview mapping confirmation, and updates stock opname upon user confirmation.",
+    "5. USER CREATION BY ROLE (/app/pengguna): Allow admin to create local accounts with roles: admin, petugas_gudang, and tim_stock_opname.",
+    "6. WAREHOUSE MANUAL TASKS: Keep and enhance manual forms for barang masuk (/app/barang-masuk) and penyaluran (/app/catat-penyaluran).",
+    "7. DATA-TESTID STRICTNESS: Every form field, button, table row, and modal must include specific role-based data-testid attributes."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "All interactive elements MUST include data-testid attributes (kebab-case).",
+    "Maintain contrast accessibility standards. Hover states must explicitly set text color.",
+    "Do NOT use transparent backgrounds for header, overlays, or dropdown menus.",
+    "Never show plain passwords on screen; always use input type='password'.",
+    "Ensure standard light mode responsive grid layout with minimum internal padding p-4 or p-6."
   ]
 }

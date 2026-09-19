@@ -1,5 +1,12 @@
 # Test Credentials — SIPOSTLOG
 
+## Perbaikan login terbaru (19 September 2026)
+- Kredensial tetap username `admin`, password `admin`; sudah sesuai bcrypt hash konfigurasi.
+- URL browser: baca REACT_APP_BACKEND_URL dari frontend/.env.
+- Kedua Origin resmi aplikasi tercantum dalam CORS_ORIGINS backend/.env, termasuk alamat internal cluster yang diteruskan proxy.
+- Endpoint utama tetap POST `/api/auth/admin/login`; alias POST `/api/auth/login` tersedia.
+- API key AI milik pengguna tidak disimpan di dokumen ini dan belum diintegrasikan. Jangan tampilkan atau salin rahasia ke laporan uji.
+
 Auth utama (2026-09-19): akun admin lokal dengan cookie session_token HttpOnly/Secure/SameSite=None. Password disimpan sebagai bcrypt hash; token lokal di-hash dalam MongoDB. UI tidak menampilkan kredensial.
 
 ## Admin lokal aktif

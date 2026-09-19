@@ -1,0 +1,38 @@
+{
+  "summary": "Re-validated the high-priority admin login/throttle fix via public URL. Required 8-test regression suite passed (8/8), additional X-Forwarded-For throttle regression passed, and browser login session flow works without Origin rejection.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_login_priority_regression.py",
+    "/app/backend/tests/test_login_throttle_xff_regression.py",
+    "/app/test_reports/pytest/pytest_results_iteration_4.xml",
+    "/app/test_reports/pytest/pytest_results_iteration_4_xff.xml"
+  ],
+  "action_items": [
+    "No blocker from this scope. Keep running test_login_priority_regression.py and test_login_throttle_xff_regression.py in auth regression CI."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py still uses FastAPI on_event startup/shutdown hooks (deprecation warnings observed); migrate to lifespan handlers in a future refactor.",
+    "backend/server.py remains very large (>700 lines) and should be split by domain for maintainability and safer auth changes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_login_throttle_xff_regression.py",
+    "/app/test_reports/iteration_4.json"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 targeted tests passed: 8 regression + 1 forwarded-header lockout test)",
+    "frontend": "100% of requested login/session/logout/access-control flow"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use public URL from frontend/.env. Admin credentials unchanged (admin/admin). Lockout behavior confirmed username-scoped and not bypassed by varying X-Forwarded-For headers. Browser flow confirmed: /login -> /app/stok, reload persists, logout blocks /app/stok and redirects to /login.",
+  "rca of the issue": "Original high issue was lockout-key fragmentation behind ingress/proxy. Current implementation now keys attempts by SHA256('username:'+normalized_username), increments atomically before bcrypt verification, enforces 429 on 6th failure, and successful login clears only matching account counter. Reproduced and validated as fixed through external URL and Mongo identifier checks."
+}

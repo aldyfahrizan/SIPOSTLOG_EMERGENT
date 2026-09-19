@@ -12,6 +12,7 @@ EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/
 
 ROLE_ADMIN = "admin"
 ROLE_PETUGAS = "petugas"
+ROLE_OPNAME = "opname"
 ROLE_PENDING = "pending"
 
 
@@ -23,6 +24,7 @@ def public_user(doc: dict) -> dict:
     return {
         "user_id": doc["user_id"],
         "email": doc["email"],
+        "username": doc.get("username", ""),
         "name": doc.get("name", ""),
         "picture": doc.get("picture", ""),
         "role": doc.get("role", ROLE_PENDING),

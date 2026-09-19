@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, login, loginAdmin, isStaff: user && (user.role === "admin" || user.role === "petugas"), isAdmin: user?.role === "admin" }}>
+    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, login, loginAdmin, isStaff: user && ["admin", "petugas", "opname"].includes(user.role), isAdmin: user?.role === "admin" }}>
       {children}
     </AuthContext.Provider>
   );

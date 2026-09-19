@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from pymongo import ReturnDocument
 from starlette.concurrency import run_in_threadpool
 
 from auth import SESSION_DAYS, public_user
@@ -21,6 +22,7 @@ class AdminLoginBody(BaseModel):
 class UserResponse(BaseModel):
     user_id: str
     email: str
+    username: str = ""
     name: str
     picture: str
     role: str
@@ -56,22 +58,24 @@ async def login_admin(body: AdminLoginBody, request: Request, response: Response
     db = request.app.state.db
     username = body.username.strip().lower()
     now = datetime.now(timezone.utc)
-    identifier = hashlib.sha256(f"{request.client.host}:{username}".encode()).hexdigest()
+    # Account-scoped throttling cannot be bypassed by changing proxy IP or forged forwarding headers.
+    identifier = hashlib.sha256(f"username:{username}".encode()).hexdigest()
     await db.login_attempts.delete_many({"identifier": identifier, "expires_at": {"$lte": now}})
-    attempt = await db.login_attempts.find_one({"identifier": identifier}, {"_id": 0})
-    if attempt and attempt["count"] >= 5:
+    attempt = await db.login_attempts.find_one_and_update(
+        {"identifier": identifier},
+        {"$inc": {"count": 1}, "$setOnInsert": {"expires_at": now + timedelta(minutes=15)}},
+        upsert=True, projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if attempt["count"] > 5:
         raise HTTPException(429, "Terlalu banyak percobaan masuk. Coba lagi dalam 15 menit.", headers={"Retry-After": "900"})
     user = await db.users.find_one({"username": username, "auth_method": "password"}, {"_id": 0})
     password_hash = user["password_hash"] if user else os.environ["ADMIN_PASSWORD_HASH"]
     password_bytes = body.password.encode("utf-8")
     valid = len(password_bytes) <= 72 and await run_in_threadpool(bcrypt.checkpw, password_bytes, password_hash.encode())
     if not valid or not user:
-        await db.login_attempts.update_one({"identifier": identifier}, {
-            "$inc": {"count": 1}, "$setOnInsert": {"expires_at": now + timedelta(minutes=15)},
-        }, upsert=True)
         raise HTTPException(401, "Username atau kata sandi salah.")
-    if not user.get("active") or user.get("role") != "admin":
-        raise HTTPException(403, "Akses admin tidak tersedia untuk akun ini.")
+    if not user.get("active") or user.get("role") not in ("admin", "petugas", "opname"):
+        raise HTTPException(403, "Akun nonaktif atau belum memiliki hak akses.")
     await db.login_attempts.delete_one({"identifier": identifier})
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_login": now}})
     user["last_login"] = now

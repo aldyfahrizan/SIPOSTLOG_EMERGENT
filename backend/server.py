@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / ".env", override=True)
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,12 +19,13 @@ from pymongo import ReturnDocument
 from pydantic import BaseModel, Field
 
 from auth import (
-    ROLE_ADMIN, ROLE_PENDING, ROLE_PETUGAS, exchange_session, get_current_user, logout as do_logout, require_role, public_user,
+    ROLE_ADMIN, ROLE_PENDING, ROLE_PETUGAS, ROLE_OPNAME, exchange_session, get_current_user, logout as do_logout, require_role, public_user,
 )
 from admin_login import AdminLoginBody, UserResponse, login_admin, seed_local_admin
 from excel_utils import build_opname_template, build_workbook, parse_opname_upload
 from pdf_utils import build_pdf_report
 from seed_data import CATALOG_VERSION, DESTINATION_CYCLE, EXPECTED_ITEM_COUNT, INCIDENT_TYPES, INITIAL_ITEMS
+from management import router as management_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sipostlog")
@@ -36,7 +37,9 @@ app = FastAPI(title="SIPOSTLOG API", version="2.0.0")
 app.state.db = db
 api = APIRouter(prefix="/api")
 
-STAFF = (ROLE_ADMIN, ROLE_PETUGAS)
+WAREHOUSE = (ROLE_ADMIN, ROLE_PETUGAS)
+STAFF = (*WAREHOUSE, ROLE_OPNAME)
+ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
 
 
 # ---------- helpers ----------
@@ -129,7 +132,7 @@ async def record_transaction(tx_type: str, before: dict, after_qty: int, user: d
 
 async def apply_stock_in(item_id: str, qty: int, user: dict, occurred_at: datetime, source: str, notes: str):
     before = await db.items.find_one_and_update(
-        {"id": item_id}, {"$inc": {"currentStock": qty}}, projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
+        {"id": item_id, "_stock_lock": {"$exists": False}}, {"$inc": {"currentStock": qty}}, projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
     )
     if not before:
         raise HTTPException(status_code=404, detail="Item tidak ditemukan")
@@ -138,7 +141,7 @@ async def apply_stock_in(item_id: str, qty: int, user: dict, occurred_at: dateti
 
 async def apply_stock_out(item_id: str, qty: int, user: dict, occurred_at: datetime, destination: str, incident_type: str, notes: str):
     before = await db.items.find_one_and_update(
-        {"id": item_id, "currentStock": {"$gte": qty}}, {"$inc": {"currentStock": -qty}},
+        {"id": item_id, "currentStock": {"$gte": qty}, "_stock_lock": {"$exists": False}}, {"$inc": {"currentStock": -qty}},
         projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
     )
     if not before:
@@ -152,7 +155,7 @@ async def apply_stock_out(item_id: str, qty: int, user: dict, occurred_at: datet
 
 async def apply_adjustment(item_id: str, new_qty: int, user: dict, occurred_at: datetime, reason: str, notes: str):
     before = await db.items.find_one_and_update(
-        {"id": item_id}, {"$set": {"currentStock": new_qty}}, projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
+        {"id": item_id, "_stock_lock": {"$exists": False}}, {"$set": {"currentStock": new_qty}}, projection={"_id": 0}, return_document=ReturnDocument.BEFORE,
     )
     if not before:
         raise HTTPException(status_code=404, detail="Item tidak ditemukan")
@@ -238,6 +241,7 @@ async def public_summary():
 
 # ---------- auth ----------
 @api.post("/auth/admin/login", response_model=UserResponse)
+@api.post("/auth/login", response_model=UserResponse)
 async def auth_admin_login(body: AdminLoginBody, request: Request, response: Response):
     return await login_admin(body, request, response)
 
@@ -397,12 +401,12 @@ async def dashboard_distribution(start: Optional[str] = None, end: Optional[str]
 
 # ---------- transactions ----------
 @api.post("/transactions/in", status_code=201)
-async def stock_in(body: StockInBody, user=Depends(require_role(*STAFF))):
+async def stock_in(body: StockInBody, user=Depends(require_role(*WAREHOUSE))):
     return await apply_stock_in(body.item_id, body.quantity, user, occurred_at_from(body.date), body.source.strip(), body.notes.strip())
 
 
 @api.post("/transactions/out", status_code=201)
-async def stock_out(body: StockOutBody, user=Depends(require_role(*STAFF))):
+async def stock_out(body: StockOutBody, user=Depends(require_role(*WAREHOUSE))):
     if body.incident_type not in INCIDENT_TYPES:
         raise HTTPException(status_code=400, detail="Jenis kejadian tidak valid")
     return await apply_stock_out(body.item_id, body.quantity, user, occurred_at_from(body.date), body.destination, body.incident_type, body.notes.strip())
@@ -619,7 +623,7 @@ async def list_users(user=Depends(require_role(ROLE_ADMIN))):
 async def patch_user(user_id: str, body: UserPatch, user=Depends(require_role(ROLE_ADMIN))):
     update = {}
     if body.role is not None:
-        if body.role not in (ROLE_ADMIN, ROLE_PETUGAS, ROLE_PENDING):
+        if body.role not in (ROLE_ADMIN, ROLE_PETUGAS, ROLE_OPNAME, ROLE_PENDING):
             raise HTTPException(status_code=400, detail="Peran tidak valid")
         update["role"] = body.role
     if body.active is not None:
@@ -637,14 +641,15 @@ async def patch_user(user_id: str, body: UserPatch, user=Depends(require_role(RO
 
 
 app.include_router(api)
+app.include_router(management_router)
 
 
 @app.middleware("http")
 async def protect_session_requests(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
-        allowed = {value.strip().rstrip("/") for value in os.environ["CORS_ORIGINS"].split(",")}
-        if origin and origin.rstrip("/") not in allowed:
+        if origin and origin.rstrip("/") not in ALLOWED_ORIGINS:
+            logger.warning("Origin rejected: %r; configured: %r", origin, ALLOWED_ORIGINS)
             return JSONResponse(status_code=403, content={"detail": "Asal permintaan tidak diizinkan"})
     response = await call_next(request)
     if request.url.path.startswith("/api/auth/"):
@@ -654,10 +659,10 @@ async def protect_session_requests(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",")],
-    allow_origin_regex=r"^https://[a-z0-9-]+\.(preview\.emergentagent\.com|cluster-\d+\.preview\.emergentcf\.cloud)$",
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -701,6 +706,7 @@ async def startup():
     if len(INITIAL_ITEMS) != EXPECTED_ITEM_COUNT:
         raise RuntimeError(f"Data integrity violation: expected {EXPECTED_ITEM_COUNT} items, got {len(INITIAL_ITEMS)}")
     await db.items.create_index("id", unique=True)
+    await db.items.create_index("name_key", unique=True, sparse=True)
     await db.transactions.create_index([("occurred_at", -1)])
     await db.transactions.create_index("type")
     await db.users.create_index("email", unique=True)
@@ -709,18 +715,14 @@ async def startup():
 
     version_doc = await db.meta.find_one({"key": "catalog_version"})
     if not version_doc or version_doc.get("value") != CATALOG_VERSION:
-        await db.items.delete_many({})
-        await db.transactions.delete_many({})
-        await db.meta.delete_many({"key": {"$in": ["sample_seeded", "catalog_version"]}})
-        logger.info("Katalog item berubah, menata ulang data item & transaksi")
+        logger.info("Versi katalog diperbarui tanpa menghapus data operasional")
 
-    if await db.items.count_documents({}) == 0:
+    if not version_doc and await db.items.count_documents({}) == 0:
         ts = now_utc()
         await db.items.insert_many([{**i, "lastUpdated": ts} for i in INITIAL_ITEMS])
         logger.info("Seeded %d items", len(INITIAL_ITEMS))
     count = await db.items.count_documents({})
-    if count != EXPECTED_ITEM_COUNT:
-        raise RuntimeError(f"Data integrity violation: expected {EXPECTED_ITEM_COUNT} items in DB, got {count}")
+    logger.info("Katalog aktif: %d item", count)
 
     if not await db.meta.find_one({"key": "sample_seeded"}) and await db.transactions.count_documents({}) == 0:
         await seed_2026_history()

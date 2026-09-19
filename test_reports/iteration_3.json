@@ -1,0 +1,44 @@
+{
+  "summary": "Focused backend+frontend regression for the admin login bug was executed. Browser login admin/admin now succeeds to /app/stok, session persists on reload, internal navigation works, and logout clears access. Backend auth/origin/management groundwork mostly passed, but brute-force lockout does not reliably return 429 after 5 failed attempts via public ingress.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/admin/login",
+        "issue": "Expected lockout after 5 failed attempts is inconsistent on public route: 6th wrong attempt remained 401 instead of 429 in regression run.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_login_priority_regression.py",
+    "/app/test_reports/pytest/pytest_results_iteration_3.xml"
+  ],
+  "action_items": [
+    "Fix login throttle identifier stability behind ingress/proxy so all failed attempts for the same username/client are counted together and 429 is enforced after threshold.",
+    "Re-run auth throttle regression after fix without changing admin credentials or resetting stock data."
+  ],
+  "critical_code_review_comments": [
+    "admin_login.py lockout key uses request.client.host + username hash; under proxy/load balancing this can fragment attempts across identifiers, weakening brute-force protection.",
+    "backend/server.py is large (~736 lines) and mixes routing, startup seeding, helpers, and export logic; consider splitting by domain for safer auth/security maintenance.",
+    "backend/tests/backend_test.py still contains hardcoded fallback BASE_URL and seeded tokens; this violates strict env-only testing guidance and can hide config problems."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_login_priority_regression.py",
+    "/app/test_reports/iteration_3.json"
+  ],
+  "success_rate": {
+    "backend": "87.5% (7/8)",
+    "frontend": "100% of requested login/session/logout/navigation flows"
+  },
+  "seed_data_creation": "Created isolated TESTLOGIN_ item and testlogin_ opname user during management tests; cleaned up after test execution.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auth origin bug appears fixed for browser login (admin/admin reaches /app/stok, no 'Asal permintaan tidak diizinkan'). Remaining blocker is brute-force lockout consistency on public ingress path. Reuse /app/backend/tests/test_login_priority_regression.py and rerun pytest XML at /app/test_reports/pytest/pytest_results_iteration_3.xml after fix.",
+  "rca of the issue": "Reproduction: run 6 invalid logins to /api/auth/admin/login for a random username through public URL. Observed statuses: first five 401, sixth 401 (expected 429). Mongo inspection showed multiple login_attempts identifiers with partial counts (e.g., several count=3 docs and only one count=5), indicating attempt tracking splits across identifiers. Probable root cause: identifier uses request.client.host, which varies behind ingress/proxy/load balancing, so brute-force attempts are not always aggregated. Mitigation: derive stable client fingerprint (e.g., trusted X-Forwarded-For first IP + username, with strict proxy trust), then enforce threshold consistently."
+}
