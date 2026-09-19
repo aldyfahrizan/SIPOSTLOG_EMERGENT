@@ -1,0 +1,126 @@
+import os
+import uuid
+from datetime import datetime, timezone, timedelta
+
+import httpx
+from fastapi import HTTPException, Request, Response
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
+SESSION_DAYS = 7
+EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+ROLE_ADMIN = "admin"
+ROLE_PETUGAS = "petugas"
+ROLE_PENDING = "pending"
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def public_user(doc: dict) -> dict:
+    return {
+        "user_id": doc["user_id"],
+        "email": doc["email"],
+        "name": doc.get("name", ""),
+        "picture": doc.get("picture", ""),
+        "role": doc.get("role", ROLE_PENDING),
+        "active": doc.get("active", True),
+        "created_at": doc.get("created_at"),
+        "last_login": doc.get("last_login"),
+    }
+
+
+async def exchange_session(db: AsyncIOMotorDatabase, session_id: str, response: Response) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": session_id})
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Sesi Google tidak valid")
+    data = r.json()
+    email = data["email"].lower()
+    admin_email = os.environ.get("ADMIN_EMAIL", "").lower()
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    now = _now()
+    if user is None:
+        user = {
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": email,
+            "name": data.get("name", ""),
+            "picture": data.get("picture", ""),
+            "role": ROLE_ADMIN if email == admin_email else ROLE_PENDING,
+            "active": True,
+            "created_at": now,
+            "last_login": now,
+        }
+        await db.users.insert_one(dict(user))
+    else:
+        update = {"name": data.get("name", user.get("name")), "picture": data.get("picture", user.get("picture")), "last_login": now}
+        if email == admin_email and user.get("role") != ROLE_ADMIN:
+            update["role"] = ROLE_ADMIN
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": update})
+        user.update(update)
+
+    token = data["session_token"]
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"],
+        "session_token": token,
+        "expires_at": now + timedelta(days=SESSION_DAYS),
+        "created_at": now,
+    })
+    response.set_cookie(
+        key="session_token", value=token, httponly=True, secure=True,
+        samesite="none", path="/", max_age=SESSION_DAYS * 24 * 3600,
+    )
+    return public_user(user)
+
+
+def _token_from_request(request: Request):
+    token = request.cookies.get("session_token")
+    if token:
+        return token
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return None
+
+
+async def get_current_user(request: Request) -> dict:
+    db: AsyncIOMotorDatabase = request.app.state.db
+    token = _token_from_request(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Belum masuk")
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Sesi tidak ditemukan")
+    expires_at = session["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < _now():
+        raise HTTPException(status_code=401, detail="Sesi berakhir")
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Pengguna tidak ditemukan")
+    if not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Akun dinonaktifkan")
+    return public_user(user)
+
+
+def require_role(*roles):
+    async def dep(request: Request):
+        user = await get_current_user(request)
+        if user["role"] not in roles:
+            raise HTTPException(status_code=403, detail="Akses ditolak untuk peran ini")
+        return user
+    return dep
+
+
+async def logout(request: Request, response: Response):
+    db: AsyncIOMotorDatabase = request.app.state.db
+    token = _token_from_request(request)
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/", secure=True, samesite="none")
+    return {"ok": True}

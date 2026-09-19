@@ -1,0 +1,124 @@
+{
+  "project_name": "SIPOSTLOG - Sistem Informasi Pemantauan Stock Opname Logistik BPBD Kabupaten Banjar",
+  "archetype": "Emergency Response Tactical & Civic Transparency",
+  "target_audience": "Masyarakat Kabupaten Banjar (Public View) & Petugas Logistik BPBD (Internal App)",
+  "theme": {
+    "mode": "hybrid_adaptive",
+    "primary_brand_color": "#F59E0B",
+    "brand_name": "BPBD Kabupaten Banjar - SIPOSTLOG",
+    "background_dark": "#0F172A",
+    "card_dark": "#1E293B",
+    "border_dark": "#334155",
+    "text_dark_primary": "#F8FAFC",
+    "text_dark_secondary": "#94A3B8",
+    "accent_emergency_red": "#EF4444",
+    "accent_safe_green": "#10B981",
+    "accent_bpbd_amber": "#F59E0B",
+    "accent_navy_blue": "#1E3A8A"
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_data_font": "JetBrains Mono, monospace",
+    "scale": {
+      "h1": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "small_badge": "text-xs font-mono uppercase tracking-wider"
+    }
+  },
+  "public_view_rules": {
+    "hide_quantities": true,
+    "allowed_fields": ["nama_barang", "kategori", "status_stok (Aman/Menipis)", "satuan"],
+    "prohibited_fields_for_public": ["jumlah_stok", "stok_minimal", "nilai_rupiah"],
+    "features": [
+      "Summary counters: Total Items (33), Count of 'Aman', Count of 'Menipis'",
+      "Category filter tabs (Semua, Pangan, Sandang, Shelter/Hunian, Sanitasi, Evakuasi)",
+      "Search input with instant filtering",
+      "Timestamp of last stock opname update",
+      "Header with 'Masuk Petugas' button trigger modal"
+    ]
+  },
+  "internal_app_rules": {
+    "access_control": "Requires Google Login & Approved Status ('Aktif')",
+    "sidebar_navigation": [
+      {
+        "id": "dashboard_stok",
+        "label": "Dashboard Stok",
+        "description": "Ringkasan stok riil 33 barang logistik, grafik kategori, dan alert stok menipis"
+      },
+      {
+        "id": "dashboard_penyaluran",
+        "label": "Dashboard Penyaluran",
+        "description": "Grafik tren distribusi harian, total penyaluran per posko/kecamatan & jenis bencana (HANYA DI MENU INTERNAL)"
+      },
+      {
+        "id": "barang_masuk",
+        "label": "Catat Barang Masuk",
+        "description": "Formulir penerimaan pasokan logistik baru dari BNPB/Hibah/APBD"
+      },
+      {
+        "id": "penyaluran",
+        "label": "Catat Penyaluran",
+        "description": "Formulir distribusi logistik ke posko lapangan / daerah terdampak"
+      },
+      {
+        "id": "opname_koreksi",
+        "label": "Stock Opname / Koreksi",
+        "description": "Formulir penyesuaian jumlah stok fisik beserta alasan audit"
+      },
+      {
+        "id": "riwayat",
+        "label": "Riwayat Transaksi",
+        "description": "Tabel audit trail mutasi stok (Masuk, Penyaluran, Koreksi) immutable"
+      },
+      {
+        "id": "excel_manager",
+        "label": "Ekspor & Import Excel",
+        "description": "Unduh laporan Excel dan upload berkas Excel untuk update stock opname massal"
+      },
+      {
+        "id": "kelola_pengguna",
+        "label": "Kelola Pengguna",
+        "description": "Manajemen peran petugas & persetujuan akun baru (Admin Only)"
+      }
+    ]
+  },
+  "layout_and_bento": {
+    "grid_system": "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "card_style": "rounded-xl border border-slate-700/60 bg-slate-800/80 backdrop-blur-md p-6 shadow-xl hover:border-amber-500/40 transition-all duration-200",
+    "stat_cards": "Flat background with accent left border (Green for Aman, Amber/Red for Alert, Blue for Activity)"
+  },
+  "image_urls": {
+    "hero_warehouse": "https://images.unsplash.com/photo-1593113646773-028c64a8f1b8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxkaXNhc3RlciUyMHJlbGllZiUyMGxvZ2lzdGljcyUyMHdhcmVob3VzZSUyMHN1cHBseSUyMGZvb2QlMjBhaWQlMjBlbWVyZ2VuY3klMjB3YXJlaG91c2V8ZW58MHx8fHwxNzg5ODMyNjIxfDA&ixlib=rb-4.1.0&q=85",
+    "aid_packages": "https://images.pexels.com/photos/6646846/pexels-photo-6646846.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "volunteers_working": "https://images.pexels.com/photos/9090942/pexels-photo-9090942.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  },
+  "testing_and_qa": {
+    "mandatory_attribute": "data-testid",
+    "convention": "kebab-case, role-based",
+    "key_test_ids": [
+      "public-header-logo",
+      "public-login-button",
+      "public-summary-total-items",
+      "public-summary-safe-items",
+      "public-summary-low-items",
+      "public-category-filter-all",
+      "public-item-card-status",
+      "internal-sidebar-nav-penyaluran",
+      "internal-sidebar-nav-excel",
+      "excel-upload-input",
+      "excel-export-button"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure ALL 33 logistics items from src/data/initialData.ts are accurately tracked and preserved.",
+    "Do NOT sum quantities across different measurement units (e.g. KG, DOS, BUAH, METER).",
+    "Strictly enforce that public users CANNOT see item quantity counts — only 'Aman' or 'Menipis' status badges.",
+    "Add Dashboard Penyaluran module exclusively within the internal authenticated web app menu.",
+    "Implement Excel Import/Export capability allowing batch stock updates from spreadsheet files.",
+    "Remove all AI references, AI bot widgets, or AI markers from UI.",
+    "Ensure responsive layout, accessible contrast, smooth transitions, and data-testid attributes on key components."
+  ]
+}
