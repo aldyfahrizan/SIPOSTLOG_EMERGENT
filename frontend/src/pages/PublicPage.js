@@ -62,11 +62,7 @@ export default function PublicPage() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_left,rgba(245,158,11,0.18),transparent_55%)]" />
         <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-12 pb-10 grid lg:grid-cols-[1.4fr_1fr] gap-10 items-end">
           <div className="animate-rise">
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulseDot" /> Transparansi Publik
-            </div>
-            <h1 className="mt-4 text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">Status Kesiapan <span className="text-amber-600">Logistik Bencana</span> Kabupaten Banjar</h1>
-            <p className="mt-4 max-w-xl text-base text-slate-600 leading-relaxed">Pantau ketersediaan 33 jenis logistik kebencanaan yang dikelola BPBD Kabupaten Banjar. Halaman ini menampilkan status kesiapan tiap item — <span className="font-semibold text-ink-900">tanpa rincian jumlah</span>, yang hanya tersedia bagi petugas berwenang.</p>
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">Status Kesiapan <span className="text-amber-600">Logistik Bencana</span> Kabupaten Banjar</h1>
           </div>
           <div className="hidden lg:flex justify-end"><Logos size={140} /></div>
         </div>
