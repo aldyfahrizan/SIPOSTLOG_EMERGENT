@@ -7,7 +7,7 @@ export default function ProtectedRoute({ children, allowPending = false, adminOn
   const location = useLocation();
 
   if (loading) {
-    return <div className="min-h-screen bg-ink-900"><Spinner /></div>;
+    return <div className="min-h-screen bg-paper"><Spinner /></div>;
   }
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (user.role === "pending" || !user.active) {

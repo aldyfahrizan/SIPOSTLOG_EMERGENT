@@ -1,4 +1,5 @@
 import os
+import hashlib
 import uuid
 from datetime import datetime, timezone, timedelta
 
@@ -85,12 +86,19 @@ def _token_from_request(request: Request):
     return None
 
 
+def session_query(token):
+    return {"$or": [
+        {"session_token": hashlib.sha256(token.encode()).hexdigest(), "auth_method": "password"},
+        {"session_token": token, "auth_method": {"$ne": "password"}},
+    ]}
+
+
 async def get_current_user(request: Request) -> dict:
     db: AsyncIOMotorDatabase = request.app.state.db
     token = _token_from_request(request)
     if not token:
         raise HTTPException(status_code=401, detail="Belum masuk")
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    session = await db.user_sessions.find_one(session_query(token), {"_id": 0})
     if not session:
         raise HTTPException(status_code=401, detail="Sesi tidak ditemukan")
     expires_at = session["expires_at"]
@@ -121,6 +129,6 @@ async def logout(request: Request, response: Response):
     db: AsyncIOMotorDatabase = request.app.state.db
     token = _token_from_request(request)
     if token:
-        await db.user_sessions.delete_one({"session_token": token})
+        await db.user_sessions.delete_one(session_query(token))
     response.delete_cookie("session_token", path="/", secure=True, samesite="none")
     return {"ok": True}

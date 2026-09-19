@@ -27,20 +27,23 @@ def s():
 
 
 # ---------- health & public ----------
+EXPECTED_COUNT = 37
+
+
 def test_health(s):
     r = s.get(f"{API}/health")
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"
-    assert data["items"] == 33
-    assert data["expected"] == 33
+    assert data["items"] == EXPECTED_COUNT
+    assert data["expected"] == EXPECTED_COUNT
 
 
 def test_public_items_no_leak(s):
     r = s.get(f"{API}/public/items")
     assert r.status_code == 200
     items = r.json()
-    assert len(items) == 33
+    assert len(items) == EXPECTED_COUNT
     banned = {"currentStock", "minThreshold", "current_stock", "min_threshold"}
     for it in items:
         assert not (banned & set(it.keys())), f"leak: {it}"
@@ -51,7 +54,7 @@ def test_public_summary_no_leak(s):
     r = s.get(f"{API}/public/summary")
     assert r.status_code == 200
     data = r.json()
-    assert data["total_items"] == 33
+    assert data["total_items"] == EXPECTED_COUNT
     assert set(data["status_counts"].keys()) == {"aman", "menipis", "habis"}
     # Ensure whole payload doesn't include stock fields
     assert "currentStock" not in r.text
@@ -105,7 +108,7 @@ def test_rbac_petugas_cannot_patch_item(s):
 def test_rbac_admin_can_list_items(s):
     r = s.get(f"{API}/items", headers=h(ADMIN_TOKEN))
     assert r.status_code == 200
-    assert len(r.json()) == 33
+    assert len(r.json()) == EXPECTED_COUNT
 
 
 # ---------- transactions ----------
@@ -201,7 +204,7 @@ def test_dashboard_stock(s):
     r = s.get(f"{API}/dashboard/stock", headers=h(ADMIN_TOKEN))
     assert r.status_code == 200
     d = r.json()
-    assert d["total_items"] == 33
+    assert d["total_items"] == EXPECTED_COUNT
     assert "status_counts" in d and "recent_transactions" in d and "weekly_activity" in d
 
 
@@ -338,3 +341,101 @@ def test_patch_item_min_threshold(s):
     assert r.json()["minThreshold"] == original + 1
     # restore
     s.patch(f"{API}/items/{it['id']}", headers=h(ADMIN_TOKEN), json={"minThreshold": original})
+
+
+# ---------- new: year param on items ----------
+def test_items_year_2026_default(s):
+    r = s.get(f"{API}/items", headers=h(ADMIN_TOKEN))
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == EXPECTED_COUNT
+    # item-037 should be aman (3000 stock)
+    it37 = next(i for i in items if i["id"] == "item-037")
+    assert it37["status"] == "aman"
+    assert it37["planQuantity"] == 3000
+
+
+def test_items_year_2027_plan_view(s):
+    r = s.get(f"{API}/items", headers=h(ADMIN_TOKEN), params={"year": "2027"})
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == EXPECTED_COUNT
+    statuses = {i["status"] for i in items}
+    assert statuses <= {"rencana", "tidak-dianggarkan"}
+    # 4 items should be tidak-dianggarkan for 2027
+    not_budgeted = [i["id"] for i in items if i["status"] == "tidak-dianggarkan"]
+    assert set(not_budgeted) == {"item-015", "item-017", "item-027", "item-037"}
+
+
+def test_dashboard_stock_year_2026(s):
+    r = s.get(f"{API}/dashboard/stock", headers=h(ADMIN_TOKEN))
+    assert r.status_code == 200
+    d = r.json()
+    assert d["year"] == "2026"
+    assert d["realized"] is True
+    assert d["total_items"] == EXPECTED_COUNT
+    assert set(d["status_counts"].keys()) == {"aman", "menipis", "habis"}
+
+
+def test_dashboard_stock_year_2027(s):
+    r = s.get(f"{API}/dashboard/stock", headers=h(ADMIN_TOKEN), params={"year": "2027"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["year"] == "2027"
+    assert d["realized"] is False
+    assert d["total_items"] == EXPECTED_COUNT
+    assert set(d["status_counts"].keys()) == {"rencana", "tidak-dianggarkan"}
+    assert d["status_counts"]["tidak-dianggarkan"] == 4
+    assert d["status_counts"]["rencana"] == 33
+    assert d["total_planned_quantity"] > 0
+
+
+# ---------- new: item history chart ----------
+def test_item_history_chart(s, target_item):
+    r = s.get(f"{API}/items/{target_item['id']}/history-chart", headers=h(ADMIN_TOKEN))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["item_id"] == target_item["id"]
+    assert "item_name" in data and "unit" in data
+    assert isinstance(data["points"], list)
+
+
+def test_item_history_chart_404(s):
+    r = s.get(f"{API}/items/nonexistent-id/history-chart", headers=h(ADMIN_TOKEN))
+    assert r.status_code == 404
+
+
+# ---------- new: PDF exports ----------
+@pytest.mark.parametrize("path", [
+    "/export/stock/pdf",
+    "/export/distribution/pdf?start=2025-01-01&end=2026-12-31",
+    "/export/transactions/pdf?start=2025-01-01&end=2026-12-31",
+])
+def test_pdf_exports(s, path):
+    r = s.get(f"{API}{path}", headers=h(ADMIN_TOKEN))
+    assert r.status_code == 200, path
+    assert r.headers.get("content-type", "").startswith("application/pdf"), path
+    # magic bytes
+    assert r.content[:4] == b"%PDF", f"{path} did not return PDF bytes"
+    assert len(r.content) > 1000, f"{path} PDF suspiciously small"
+
+
+def test_pdf_export_pending_forbidden(s):
+    r = s.get(f"{API}/export/stock/pdf", headers=h(PENDING_TOKEN))
+    assert r.status_code == 403
+
+
+# ---------- new: CORS regex ----------
+def test_cors_preflight_no_wildcard_with_credentials(s):
+    # simulate preview subdomain
+    origin = "https://preview-test.preview.emergentagent.com"
+    r = s.options(f"{API}/auth/session", headers={
+        "Origin": origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    # Must not be '*' when credentials are true
+    aco = r.headers.get("access-control-allow-origin", "")
+    acc = r.headers.get("access-control-allow-credentials", "")
+    if acc.lower() == "true":
+        assert aco != "*", f"Invalid CORS: ACAO='*' with credentials=true (origin={origin})"

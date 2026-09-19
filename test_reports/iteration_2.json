@@ -1,0 +1,97 @@
+{
+  "summary": "Backend+frontend regression executed against public URL with real APIs/cookies. Backend pytest: 16 passed, 3 failed. Core public pages load and major internal pages render, but browser-origin write actions are blocked by 403 Origin middleware mismatch, local admin login from /login fails in browser, and year toggle 2027->2026 can crash StockDashboard runtime.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/admin/login (browser), /api/auth/logout, /api/users/{id} PATCH",
+        "issue": "Origin middleware rejects valid public site origin with 403 'Asal permintaan tidak diizinkan'. Browser login/logout/user updates fail while direct API calls from test client can pass.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "/api/auth/admin/login",
+        "issue": "Throttle behavior not reached as specified: repeated invalid username attempts stayed 401 and did not produce 429 in browser-based/public route flow.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "/api/dashboard/stock?year=2026|2027",
+        "issue": "Plan data overlaps both years for same items (example item-001 has >0 in 2026 and 2027), violating requested exclusive-year planning rule.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "StockDashboard",
+        "issue": "Runtime crash after toggling 2027 back to 2026: 'Cannot read properties of undefined (reading IN)' from weekly_activity access during stale 2027 data render.",
+        "selector": "[data-testid='year-toggle-2027'] then [data-testid='year-toggle-2026']",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Public top-bar Masuk Admin -> /login -> submit admin/admin",
+        "issue": "Fails with 403 Origin rejection, so real admin login flow is blocked in browser.",
+        "affected_selectors": [
+          "[data-testid='public-login-button']",
+          "[data-testid='admin-login-submit']",
+          "[data-testid='admin-login-error']"
+        ]
+      },
+      {
+        "flow": "Internal user role change confirm dialog",
+        "issue": "Confirm/cancel dialog appears, but confirm PATCH returns 403 Origin rejection; persistence cannot complete from UI.",
+        "affected_selectors": [
+          "[data-testid^='user-role-select-']",
+          "[data-testid='user-action-confirm-dialog-confirm']"
+        ]
+      },
+      {
+        "flow": "Logout and protected redirect",
+        "issue": "Logout POST returns 403 Origin rejection; session remains active and /app/stok remains accessible.",
+        "affected_selectors": [
+          "[data-testid='sidebar-logout-button']"
+        ]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Public/Login/Internal responsive (320/768/1024/1440)",
+        "issues": [
+          "No horizontal overflow detected on tested breakpoints.",
+          "Console warning from Recharts on small widths ('width(0) and height(0)') observed on mobile; visual blocker not seen but should be cleaned up."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_auth_public_regression.py",
+    "/app/test_reports/pytest/pytest_results_iteration_2.xml"
+  ],
+  "action_items": [
+    "Fix backend allowed-origin matching so actual public origin (preview.emergentagent.com URL from frontend/.env) is accepted for POST/PATCH/DELETE.",
+    "Re-test admin browser login/logout and user PATCH after Origin fix; these are currently blocked end-to-end.",
+    "Fix StockDashboard state safety when switching 2027->2026 (guard weekly_activity/status_counts until 2026 payload is loaded).",
+    "Implement/verify 5 failed attempts then 429 throttle for invalid username route under real public traffic path.",
+    "Align planning data with exclusive year rule if this requirement is mandatory (no dual non-zero across 2026/2027 per item)."
+  ],
+  "critical_code_review_comments": [
+    "server.py origin check uses strict CORS_ORIGINS list in custom middleware while app also has allow_origin_regex; mismatch causes legitimate browser origin to be rejected before route handlers.",
+    "StockDashboard uses 2026-only fields (weekly_activity) without defensive fallback during async year toggle transitions, causing runtime crash with 2027 payload shape.",
+    "Brute-force lockout logic appears ineffective in public-route behavior; verify identifier stability and threshold increment path under proxy/CDN client IPs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_auth_public_regression.py",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "success_rate": {
+    "backend": "84% (16/19)",
+    "frontend": "~65% of requested flows validated (remaining blocked by CRITICAL origin issue)"
+  },
+  "seed_data_creation": "No business catalog reseed/deletion. UI verification used existing seeded admin session token test_session_admin_001 only for read/navigation checks after login flow was blocked.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Major blocker: browser write actions return 403 due origin mismatch (login/logout/user patch). After fixing this, rerun full UI e2e from /login with admin/admin, then retest confirm dialog persistence and logout redirect. Also retest year toggle crash path 2027->2026 and throttle 429 behavior.",
+  "rca of the issue": "RCA-1 Origin failures: Reproduced in browser and backend logs: POST /api/auth/admin/login, PATCH /api/users/{id}, POST /api/auth/logout return 403 while GET endpoints work. Custom middleware checks Origin against CORS_ORIGINS exact list and rejects current public origin, even though CORSMiddleware has broader regex. Mitigation: unify/normalize origin allowlist logic (or reuse CORSMiddleware decision path) so public domain from frontend/.env is explicitly accepted. RCA-2 Year toggle crash: Repro by opening /app/stok, click Tahun 2027 then Tahun 2026. During async transition, component renders with 2027-shaped data while 2026 UI computes weekly_activity.IN, causing TypeError. Mitigation: null-safe guards or per-year data shape normalization before render. RCA-3 Throttle: repeated invalid username attempts did not emit 429 under tested path; likely identifier/count behavior under proxied request source differs from expectation; verify login_attempts increments and lock condition with stable identifier in production-like ingress."
+}

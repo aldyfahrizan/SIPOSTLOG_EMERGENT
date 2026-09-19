@@ -3,11 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --amber: #f59e0b;
-  --ink: #0f172a;
+  --amber: #C2410C;
+  --ink: #1E3A8A;
+  --surface: #FFFFFF;
+  --canvas: #F8FAFC;
+  --border: #E2E8F0;
 }
 
-* { -webkit-tap-highlight-color: transparent; }
+* { -webkit-tap-highlight-color: transparent; letter-spacing: 0 !important; }
 
 html { scroll-behavior: smooth; }
 
@@ -28,7 +31,7 @@ h1, h2, h3, h4 { @apply font-display; }
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.dark-panel { @apply bg-ink-800/80 border border-ink-700/70 backdrop-blur-md rounded-xl; }
+.dark-panel { @apply bg-white border border-slate-200 rounded-lg; }
 
 .stagger > * { animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
@@ -40,29 +43,51 @@ h1, h2, h3, h4 { @apply font-display; }
 .stagger > *:nth-child(n + 7) { animation-delay: 360ms; }
 
 .field {
-  @apply w-full rounded-lg border border-ink-700 bg-ink-900/70 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500;
-  @apply focus:outline-none focus:border-amber-brand focus:ring-2 focus:ring-amber-brand/25 transition-[border-color,box-shadow] duration-150;
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-500;
+  @apply focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-orange-100 transition-[border-color,box-shadow] duration-150;
 }
-.field option { background: #0f172a; }
-.label { @apply block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5; }
+.field option { background: #FFFFFF; color: #334155; }
+.label { @apply block text-xs font-semibold uppercase text-slate-600 mb-1.5; }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-full bg-amber-brand px-5 py-2.5 text-sm font-bold text-ink-900;
-  @apply hover:bg-amber-400 active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none;
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-orange px-5 py-2.5 text-sm font-bold text-white;
+  @apply hover:bg-orange-800 active:scale-[0.98] transition-[background-color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none;
 }
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink-700 px-4 py-2 text-sm font-semibold text-slate-200;
-  @apply hover:border-amber-brand/60 hover:text-amber-brand transition-colors duration-150 disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-brand-blue;
+  @apply hover:border-blue-400 hover:bg-blue-50 transition-colors duration-150 disabled:opacity-50;
 }
 
 .tbl { @apply w-full text-sm; }
-.tbl th { @apply text-left text-[11px] uppercase tracking-wider font-semibold text-slate-400 px-4 py-3 border-b border-ink-700; }
-.tbl td { @apply px-4 py-3 border-b border-ink-700/60 text-slate-200 align-top; }
+.tbl th { @apply text-left text-[11px] uppercase font-semibold text-slate-600 px-4 py-3 border-b border-slate-200 bg-slate-50; }
+.tbl td { @apply px-4 py-3 border-b border-slate-200 text-slate-700 align-top; }
 .tbl tbody tr { @apply transition-colors duration-100; }
 .tbl tbody tr:hover { background: rgba(245, 158, 11, 0.05); }
 
 .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 8px; }
+
+/* Light-mode mapping for the existing internal modules. */
+.internal-light { background: var(--canvas); color: #334155; }
+.internal-light [class*="bg-ink-"] { background-color: var(--surface); }
+.internal-light [class*="border-ink-"] { border-color: var(--border); }
+.internal-light [class*="divide-ink-"] > * + * { border-color: var(--border); }
+.internal-light :is(.text-white, .text-slate-100, .text-slate-200) { color: var(--ink); }
+.internal-light :is(.text-slate-300, .text-slate-400) { color: #475569; }
+.internal-light :is(.text-amber-brand, .text-amber-200, .text-amber-300, .text-amber-400) { color: #C2410C; }
+.internal-light :is(.text-sky-200, .text-sky-300, .text-sky-400) { color: #0369A1; }
+.internal-light :is(.text-red-300, .text-red-400) { color: #B91C1C; }
+.internal-light :is(.text-emerald-300, .text-emerald-400) { color: #047857; }
+.internal-light .text-violet-300 { color: #6D28D9; }
+.internal-light .bg-amber-brand { background-color: #C2410C; color: #FFFFFF; }
+.internal-light .btn-primary, .internal-light button.bg-red-600 { color: #FFFFFF; }
+.internal-light [class*="hover:bg-ink-"]:hover { background-color: #EFF6FF; }
+.internal-light .hover\:text-white:hover { color: #1E3A8A; }
+.internal-light .recharts-default-tooltip { background: white !important; border-color: #CBD5E1 !important; color: #334155 !important; }
+.internal-light .recharts-cartesian-axis-tick-value { fill: #475569; }
+.internal-light main, .internal-light section, .internal-light .grid > * { min-width: 0; }
+.internal-light .btn-primary, .internal-light .btn-ghost { flex-shrink: 0; }
+:is(button, a, input, select):focus-visible { outline: 2px solid #1E3A8A; outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }

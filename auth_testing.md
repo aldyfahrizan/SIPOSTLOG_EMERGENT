@@ -1,40 +1,23 @@
-# Auth-Gated App Testing Playbook (SIPOSTLOG)
+# SIPOSTLOG — panduan pengujian autentikasi
 
-DB name: `sipostlog` (see /app/backend/.env). Roles: `admin`, `petugas`, `pending`.
+## Konfigurasi
+- Baca `/app/memory/test_credentials.md`. Login lokal username admin/password admin di POST `/api/auth/admin/login`.
+- URL eksternal hanya dari frontend/.env REACT_APP_BACKEND_URL; MongoDB hanya dari backend/.env MONGO_URL + DB_NAME.
+- Metode username/password mengikuti bcrypt, seed idempoten, pembatasan percobaan masuk MongoDB, HttpOnly cookie, dan validasi Origin. Sesi opaque lama dipertahankan, bukan mengganti arsitektur menjadi JWT.
 
-## Step 1: Create Test User & Session
-```bash
-mongosh --quiet --eval "
-use('sipostlog');
-var userId = 'test-user-' + Date.now();
-var sessionToken = 'test_session_' + Date.now();
-db.users.insertOne({ user_id: userId, email: 'test.user.' + Date.now() + '@example.com', name: 'Test Admin', picture: '', role: 'admin', active: true, created_at: new Date(), last_login: new Date() });
-db.user_sessions.insertOne({ user_id: userId, session_token: sessionToken, expires_at: new Date(Date.now() + 7*24*60*60*1000), created_at: new Date() });
-print('Session token: ' + sessionToken);
-print('User ID: ' + userId);
-"
-```
-Set `role: 'petugas'` or `role: 'pending'` to test other roles.
+## Verifikasi database
+1. User admin lokal memiliki bcrypt password_hash yang diawali `$2b$`; tidak ada password plaintext.
+2. Index users.email unik; users.username unik sparse; login_attempts.identifier unik; expires_at TTL pada login_attempts dan user_sessions.
+3. Seed berulang tidak mengubah user_id/created_at/role/status atau data stok.
+4. Sesi admin lokal disimpan sebagai hash SHA-256; token mentah hanya dalam cookie. Sesi Google lama tetap terbaca.
 
-## Step 2: Test Backend API
-```bash
-curl -X GET "$API/api/auth/me" -H "Authorization: Bearer YOUR_SESSION_TOKEN"
-curl -X GET "$API/api/items" -H "Authorization: Bearer YOUR_SESSION_TOKEN"
-```
-
-## Step 3: Browser Testing
-```python
-await page.context.add_cookies([{ "name": "session_token", "value": "YOUR_SESSION_TOKEN", "domain": "<app-host>", "path": "/", "httpOnly": True, "secure": True, "sameSite": "None" }])
-await page.goto("https://<app-host>/app/stok")
-```
-
-## Clean test data
-```bash
-mongosh --quiet --eval "use('sipostlog'); db.users.deleteMany({email: /test\.user\./}); db.user_sessions.deleteMany({session_token: /test_session/});"
-```
-
-## Checklist
-- `/api/auth/me` returns user with `user_id`
-- Dashboard `/app/stok` loads without redirect to `/login`
-- Pending user → redirected to `/menunggu`
-- Public `/api/public/*` never returns `currentStock` / `minThreshold`
+## API dan browser
+1. Login benar: 200, role admin; tidak mengembalikan hash/token. Cookie session_token HttpOnly, Secure, SameSite=None. Semua auth response no-store.
+2. GET /auth/me dan endpoint internal memakai cookie yang sama; reload tetap masuk.
+3. Password/username salah: 401 generik. Lima kegagalan diikuti 429; expired lockout dapat mencoba lagi. Bersihkan data throttling uji setelah selesai.
+4. Missing/invalid/expired session: 401; pengguna nonaktif: 403; non-admin tidak boleh mengelola pengguna.
+5. Origin asing pada POST/PATCH/DELETE ditolak 403. Origin aplikasi diizinkan.
+6. Logout menghapus dokumen sesi dan cookie. Replay token setelah logout ditolak.
+7. /users dan /users/{id} tidak mengembalikan password_hash.
+8. Form kosong, type=password, error terlihat, loading dan keyboard Enter berfungsi; tidak ada petunjuk password di UI.
+9. Jalur Google bukan lingkup perbaikan; jangan menyatakan OAuth berhasil tanpa akun Google nyata.

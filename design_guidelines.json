@@ -1,124 +1,87 @@
 {
-  "project_name": "SIPOSTLOG - Sistem Informasi Pemantauan Stock Opname Logistik BPBD Kabupaten Banjar",
-  "archetype": "Emergency Response Tactical & Civic Transparency",
-  "target_audience": "Masyarakat Kabupaten Banjar (Public View) & Petugas Logistik BPBD (Internal App)",
-  "theme": {
-    "mode": "hybrid_adaptive",
-    "primary_brand_color": "#F59E0B",
-    "brand_name": "BPBD Kabupaten Banjar - SIPOSTLOG",
-    "background_dark": "#0F172A",
-    "card_dark": "#1E293B",
-    "border_dark": "#334155",
-    "text_dark_primary": "#F8FAFC",
-    "text_dark_secondary": "#94A3B8",
-    "accent_emergency_red": "#EF4444",
-    "accent_safe_green": "#10B981",
-    "accent_bpbd_amber": "#F59E0B",
-    "accent_navy_blue": "#1E3A8A"
+  "project_name": "Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)",
+  "app_type": "Government Hybrid Stock Opname & Public Monitoring Portal",
+  "archetype": "SIKD Bright Civic Minimalist (Light Mode)",
+  "theme_strategy": {
+    "mode": "Light",
+    "background": "Light Slate (#F8FAFC) & Pure White (#FFFFFF)",
+    "primary_header": "Deep Civic Navy (#1E3A8A)",
+    "accent": "Energetic SIKD Orange (#C2410C)",
+    "rule": "Strictly NO dark/black default theme. All dark panels replaced with bright, crisp white cards with subtle slate borders (#E2E8F0)."
   },
   "typography": {
-    "heading_font": "Plus Jakarta Sans, sans-serif",
-    "body_font": "Inter, sans-serif",
-    "mono_data_font": "JetBrains Mono, monospace",
-    "scale": {
-      "h1": "text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight",
-      "h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
-      "h3": "text-xl sm:text-2xl font-semibold",
-      "body": "text-sm sm:text-base leading-relaxed",
-      "small_badge": "text-xs font-mono uppercase tracking-wider"
+    "font_family_display": "Plus Jakarta Sans, sans-serif",
+    "font_family_body": "Manrope, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "styles": {
+      "h1": "text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight text-slate-900",
+      "h3": "text-lg sm:text-xl font-semibold text-slate-900",
+      "body": "text-sm sm:text-base text-slate-600 leading-relaxed",
+      "labels": "text-xs font-bold uppercase tracking-wider text-slate-500",
+      "numbers": "font-mono tabular-nums font-semibold text-slate-900"
     }
   },
-  "public_view_rules": {
-    "hide_quantities": true,
-    "allowed_fields": ["nama_barang", "kategori", "status_stok (Aman/Menipis)", "satuan"],
-    "prohibited_fields_for_public": ["jumlah_stok", "stok_minimal", "nilai_rupiah"],
-    "features": [
-      "Summary counters: Total Items (33), Count of 'Aman', Count of 'Menipis'",
-      "Category filter tabs (Semua, Pangan, Sandang, Shelter/Hunian, Sanitasi, Evakuasi)",
-      "Search input with instant filtering",
-      "Timestamp of last stock opname update",
-      "Header with 'Masuk Petugas' button trigger modal"
+  "color_palette": {
+    "primary_navy": "#1E3A8A",
+    "primary_navy_hover": "#1D4ED8",
+    "accent_orange": "#C2410C",
+    "accent_orange_hover": "#EA580C",
+    "canvas_bg": "#F8FAFC",
+    "surface_white": "#FFFFFF",
+    "border_light": "#E2E8F0",
+    "border_focus": "#C2410C",
+    "text_main": "#0F172A",
+    "text_muted": "#64748B",
+    "status_emerald": "#059669",
+    "status_amber": "#D97706",
+    "status_rose": "#DC2626",
+    "status_blue": "#2563EB"
+  },
+  "top_bar_navigation": {
+    "sticky": true,
+    "background_class": "bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm sticky top-0 z-50",
+    "app_title": "Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)",
+    "logos": [
+      "/logo/kab-banjar.png",
+      "/logo/bpbd-banjar.png"
+    ],
+    "admin_login_trigger": {
+      "label": "Masuk Admin",
+      "style": "bg-navy-800 text-white hover:bg-navy-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all shadow-sm",
+      "data_testid": "top-bar-admin-login-button"
+    }
+  },
+  "admin_login": {
+    "access_point": "Top Bar Admin Modal / Page",
+    "credentials": {
+      "username": "admin",
+      "password": "admin"
+    },
+    "security_ui_rules": [
+      "Password input field MUST use type='password' to conceal input text.",
+      "DO NOT show password hints or text anywhere on screen or inside login modal."
     ]
   },
-  "internal_app_rules": {
-    "access_control": "Requires Google Login & Approved Status ('Aktif')",
-    "sidebar_navigation": [
-      {
-        "id": "dashboard_stok",
-        "label": "Dashboard Stok",
-        "description": "Ringkasan stok riil 33 barang logistik, grafik kategori, dan alert stok menipis"
-      },
-      {
-        "id": "dashboard_penyaluran",
-        "label": "Dashboard Penyaluran",
-        "description": "Grafik tren distribusi harian, total penyaluran per posko/kecamatan & jenis bencana (HANYA DI MENU INTERNAL)"
-      },
-      {
-        "id": "barang_masuk",
-        "label": "Catat Barang Masuk",
-        "description": "Formulir penerimaan pasokan logistik baru dari BNPB/Hibah/APBD"
-      },
-      {
-        "id": "penyaluran",
-        "label": "Catat Penyaluran",
-        "description": "Formulir distribusi logistik ke posko lapangan / daerah terdampak"
-      },
-      {
-        "id": "opname_koreksi",
-        "label": "Stock Opname / Koreksi",
-        "description": "Formulir penyesuaian jumlah stok fisik beserta alasan audit"
-      },
-      {
-        "id": "riwayat",
-        "label": "Riwayat Transaksi",
-        "description": "Tabel audit trail mutasi stok (Masuk, Penyaluran, Koreksi) immutable"
-      },
-      {
-        "id": "excel_manager",
-        "label": "Ekspor & Import Excel",
-        "description": "Unduh laporan Excel dan upload berkas Excel untuk update stock opname massal"
-      },
-      {
-        "id": "kelola_pengguna",
-        "label": "Kelola Pengguna",
-        "description": "Manajemen peran petugas & persetujuan akun baru (Admin Only)"
-      }
-    ]
-  },
-  "layout_and_bento": {
-    "grid_system": "grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
-    "card_style": "rounded-xl border border-slate-700/60 bg-slate-800/80 backdrop-blur-md p-6 shadow-xl hover:border-amber-500/40 transition-all duration-200",
-    "stat_cards": "Flat background with accent left border (Green for Aman, Amber/Red for Alert, Blue for Activity)"
-  },
-  "image_urls": {
-    "hero_warehouse": "https://images.unsplash.com/photo-1593113646773-028c64a8f1b8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxkaXNhc3RlciUyMHJlbGllZiUyMGxvZ2lzdGljcyUyMHdhcmVob3VzZSUyMHN1cHBseSUyMGZvb2QlMjBhaWQlMjBlbWVyZ2VuY3klMjB3YXJlaG91c2V8ZW58MHx8fHwxNzg5ODMyNjIxfDA&ixlib=rb-4.1.0&q=85",
-    "aid_packages": "https://images.pexels.com/photos/6646846/pexels-photo-6646846.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-    "volunteers_working": "https://images.pexels.com/photos/9090942/pexels-photo-9090942.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
-  },
-  "testing_and_qa": {
-    "mandatory_attribute": "data-testid",
-    "convention": "kebab-case, role-based",
-    "key_test_ids": [
-      "public-header-logo",
-      "public-login-button",
-      "public-summary-total-items",
-      "public-summary-safe-items",
-      "public-summary-low-items",
-      "public-category-filter-all",
-      "public-item-card-status",
-      "internal-sidebar-nav-penyaluran",
-      "internal-sidebar-nav-excel",
-      "excel-upload-input",
-      "excel-export-button"
+  "public_stock_view": {
+    "qualitative_status": true,
+    "qualitative_labels": {
+      "SANGAT_CUKUP": "Sangat Cukup (Tersedia Melimpah)",
+      "CUKUP": "Cukup (Aman & Siap Salur)",
+      "MENIPIS": "Menipis (Perlu Pengadaan)",
+      "KRITIS": "Kritis (Stok Sangat Terbatas)"
+    },
+    "widgets": [
+      "Animated Stock Readiness Gauge Metric",
+      "Category Summary Tiles (Bahan Pangan, Sandang, Peralatan Evakuasi, Kesehatan)",
+      "Search & Category/Condition Filter Bar"
     ]
   },
   "instructions_to_main_agent": [
-    "Ensure ALL 33 logistics items from src/data/initialData.ts are accurately tracked and preserved.",
-    "Do NOT sum quantities across different measurement units (e.g. KG, DOS, BUAH, METER).",
-    "Strictly enforce that public users CANNOT see item quantity counts — only 'Aman' or 'Menipis' status badges.",
-    "Add Dashboard Penyaluran module exclusively within the internal authenticated web app menu.",
-    "Implement Excel Import/Export capability allowing batch stock updates from spreadsheet files.",
-    "Remove all AI references, AI bot widgets, or AI markers from UI.",
-    "Ensure responsive layout, accessible contrast, smooth transitions, and data-testid attributes on key components."
+    "Refactor AppShell.js and PublicPage.js to strictly use bright SIKD colors (#1E3A8A navy, #C2410C orange accent, white background).",
+    "Ensure top bar displays full name 'Sistem Informasi Pemantauan Stock Opname Logistik (SIPOSTLOG)' alongside Kab Banjar and BPBD logos.",
+    "Add 'Masuk Admin' action on top bar that opens admin login modal with username 'admin' and concealed password ('type=password').",
+    "Remove any visible password text or hints from the UI.",
+    "Ensure all interactive elements have data-testid attributes for automated testing."
   ]
 }

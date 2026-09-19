@@ -6,3 +6,9 @@ dist/
 *.key.json
 secrets.json
 .DS_Store
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials

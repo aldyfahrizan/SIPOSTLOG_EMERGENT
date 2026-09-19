@@ -1,6 +1,18 @@
 # Test Credentials — SIPOSTLOG
 
-Auth: Google login via Emergent-managed OAuth (no app-managed passwords).
+Auth utama (2026-09-19): akun admin lokal dengan cookie session_token HttpOnly/Secure/SameSite=None. Password disimpan sebagai bcrypt hash; token lokal di-hash dalam MongoDB. UI tidak menampilkan kredensial.
+
+## Admin lokal aktif
+- Username: `admin`
+- Password: `admin`
+- Email internal: `admin@sipostlog.local`
+- Nama: Administrator SIPOSTLOG
+- Role: admin
+- Halaman: `/login` dari menu Masuk Admin di bar atas
+- Endpoint: POST `/api/auth/admin/login` JSON `{ "username": "admin", "password": "admin" }`
+- Sesi: GET `/api/auth/me`; keluar: POST `/api/auth/logout`
+- Kredensial dipilih pengguna. Hindari menguji >5 password salah untuk akun ini tanpa membersihkan login_attempts sesudah uji.
+- Tidak ada password akun Google; jalur OAuth lama dipertahankan untuk kompatibilitas dan tidak menjadi login utama.
 
 ## Real admin allowlist
 - `aldyfahrizan@gmail.com` → role `admin` automatically on first Google login (ADMIN_EMAIL in /app/backend/.env)

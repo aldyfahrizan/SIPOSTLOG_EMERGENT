@@ -13,14 +13,15 @@ load_dotenv(ROOT_DIR / ".env")
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response as RawResponse
+from fastapi.responses import Response as RawResponse, JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field
 
 from auth import (
-    ROLE_ADMIN, ROLE_PENDING, ROLE_PETUGAS, exchange_session, get_current_user, logout as do_logout, require_role,
+    ROLE_ADMIN, ROLE_PENDING, ROLE_PETUGAS, exchange_session, get_current_user, logout as do_logout, require_role, public_user,
 )
+from admin_login import AdminLoginBody, UserResponse, login_admin, seed_local_admin
 from excel_utils import build_opname_template, build_workbook, parse_opname_upload
 from pdf_utils import build_pdf_report
 from seed_data import CATALOG_VERSION, DESTINATION_CYCLE, EXPECTED_ITEM_COUNT, INCIDENT_TYPES, INITIAL_ITEMS
@@ -236,6 +237,11 @@ async def public_summary():
 
 
 # ---------- auth ----------
+@api.post("/auth/admin/login", response_model=UserResponse)
+async def auth_admin_login(body: AdminLoginBody, request: Request, response: Response):
+    return await login_admin(body, request, response)
+
+
 @api.post("/auth/session")
 async def auth_session(body: SessionBody, response: Response):
     return clean(await exchange_session(db, body.session_id, response))
@@ -257,7 +263,7 @@ async def list_items(year: str = "2026", user=Depends(require_role(*STAFF))):
     items = await db.items.find({}, {"_id": 0}).sort("id", 1).to_list(200)
     if year == "2027":
         return [
-            {**clean(i), "status": "rencana" if i["planYear"].get("2027", 0) > 0 else "tidak-dianggarkan", "planQuantity": i["planYear"].get("2027", 0)}
+            {**clean(i), "currentStock": 0, "status": "rencana" if i["planYear"].get("2027", 0) > 0 else "tidak-dianggarkan", "planQuantity": i["planYear"].get("2027", 0)}
             for i in items
         ]
     return [{**clean(i), "status": stock_status(i), "planQuantity": i["planYear"].get("2026", 0)} for i in items]
@@ -301,7 +307,7 @@ async def dashboard_stock(year: str = "2026", user=Depends(require_role(*STAFF))
             tidak += st == "tidak-dianggarkan"
             c = categories.setdefault(i["category"], {"category": i["category"], "count": 0, "low": 0})
             c["count"] += 1
-            rows.append({**clean(i), "status": st, "planQuantity": plan})
+            rows.append({**clean(i), "currentStock": 0, "status": st, "planQuantity": plan})
         return {
             "year": "2027",
             "realized": False,
@@ -309,7 +315,7 @@ async def dashboard_stock(year: str = "2026", user=Depends(require_role(*STAFF))
             "status_counts": {"rencana": rencana, "tidak-dianggarkan": tidak},
             "categories": sorted(categories.values(), key=lambda c: -c["count"]),
             "items": rows,
-            "total_planned_quantity": sum(r["planQuantity"] for r in rows),
+            "total_categories": len(categories),
         }
 
     categories = {}
@@ -603,13 +609,13 @@ async def excel_import(file: UploadFile = File(...), user=Depends(require_role(*
 
 
 # ---------- users (admin) ----------
-@api.get("/users")
+@api.get("/users", response_model=list[UserResponse])
 async def list_users(user=Depends(require_role(ROLE_ADMIN))):
     users = await db.users.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return clean(users)
+    return [public_user(u) for u in users]
 
 
-@api.patch("/users/{user_id}")
+@api.patch("/users/{user_id}", response_model=UserResponse)
 async def patch_user(user_id: str, body: UserPatch, user=Depends(require_role(ROLE_ADMIN))):
     update = {}
     if body.role is not None:
@@ -627,10 +633,23 @@ async def patch_user(user_id: str, body: UserPatch, user=Depends(require_role(RO
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan")
     if update.get("active") is False or update.get("role") == ROLE_PENDING:
         await db.user_sessions.delete_many({"user_id": user_id})
-    return clean(target)
+    return public_user(target)
 
 
 app.include_router(api)
+
+
+@app.middleware("http")
+async def protect_session_requests(request: Request, call_next):
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        allowed = {value.strip().rstrip("/") for value in os.environ["CORS_ORIGINS"].split(",")}
+        if origin and origin.rstrip("/") not in allowed:
+            return JSONResponse(status_code=403, content={"detail": "Asal permintaan tidak diizinkan"})
+    response = await call_next(request)
+    if request.url.path.startswith("/api/auth/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -686,6 +705,7 @@ async def startup():
     await db.transactions.create_index("type")
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
+    await seed_local_admin(db)
 
     version_doc = await db.meta.find_one({"key": "catalog_version"})
     if not version_doc or version_doc.get("value") != CATALOG_VERSION:

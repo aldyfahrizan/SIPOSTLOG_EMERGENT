@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, Package, Search, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, ClipboardCheck, Package, Search, TrendingUp, FileText } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "../lib/api";
+import { api, downloadFile, errorMessage } from "../lib/api";
+import { toast } from "sonner";
 import StatCard, { EmptyState, PageHeader, Panel, Spinner } from "../components/StatCard";
 import { StatusBadge, TypeBadge } from "../components/StatusBadge";
 import Plan2027View from "../components/Plan2027View";
@@ -30,17 +31,33 @@ export default function StockDashboard() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("semua");
   const [trendItem, setTrendItem] = useState(null);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [printing, setPrinting] = useState(false);
 
-  useEffect(() => { setData(null); api.get("/dashboard/stock", { params: { year } }).then((r) => setData(r.data)).catch(() => {}); }, [year]);
+  useEffect(() => {
+    let active = true;
+    setData(null); setError("");
+    api.get("/dashboard/stock", { params: { year } }).then((r) => { if (active) setData(r.data); }).catch((err) => { if (active) setError(errorMessage(err)); });
+    return () => { active = false; };
+  }, [year, retry]);
+
+  const printStock = async () => {
+    setPrinting(true);
+    try { await downloadFile("/export/stock/pdf", "stok.pdf"); }
+    catch (err) { toast.error(errorMessage(err)); }
+    finally { setPrinting(false); }
+  };
 
   const rows = useMemo(() => (data?.items || []).filter((i) => (filter === "semua" || i.status === filter) && i.name.toLowerCase().includes(q.toLowerCase())), [data, q, filter]);
 
+  if (error) return <div role="alert" data-testid="stock-load-error" className="text-red-700">{error}<button className="btn-ghost ml-3" data-testid="stock-retry-button" onClick={() => setRetry((v) => v + 1)}>Coba lagi</button></div>;
   if (!data) return <Spinner />;
 
   if (year === "2027") {
     return (
       <div data-testid="stock-dashboard">
-        <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description="Posisi stok riil 37 item logistik beserta satuan aslinya. Satuan berbeda tidak pernah dijumlahkan menjadi satu total."
+        <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description={`Rencana logistik tahun ${year} · ${data.total_items} jenis item.`}
           actions={<YearToggle year={year} onChange={setYear} />} />
         <Plan2027View data={data} />
       </div>
@@ -51,11 +68,11 @@ export default function StockDashboard() {
 
   return (
     <div data-testid="stock-dashboard">
-      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description="Posisi stok riil 37 item logistik beserta satuan aslinya. Satuan berbeda tidak pernah dijumlahkan menjadi satu total."
-        actions={<><YearToggle year={year} onChange={setYear} /><Link to="/app/barang-masuk" className="btn-ghost" data-testid="quick-stock-in"><ArrowDownToLine size={14} /> Barang Masuk</Link><Link to="/app/catat-penyaluran" className="btn-primary" data-testid="quick-stock-out"><ArrowUpFromLine size={14} /> Catat Penyaluran</Link></>} />
+      <PageHeader eyebrow="Dashboard Internal" title="Dashboard Stok" description={`Posisi stok tahun ${year} · ${data.total_items} jenis item logistik.`}
+        actions={<><YearToggle year={year} onChange={setYear} /><button onClick={printStock} disabled={printing} className="btn-ghost" data-testid="stock-export-pdf-button"><FileText size={14} /> {printing ? "Mencetak…" : "Cetak PDF"}</button><Link to="/app/barang-masuk" className="btn-ghost" data-testid="quick-stock-in"><ArrowDownToLine size={14} /> Barang Masuk</Link><Link to="/app/catat-penyaluran" className="btn-primary" data-testid="quick-stock-out"><ArrowUpFromLine size={14} /> Catat Penyaluran</Link></>} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger">
-        <StatCard testId="stat-total-items" label="Jenis Item" value={data.total_items} sub="validasi wajib 37 item" accent="slate" icon={Package} />
+        <StatCard testId="stat-total-items" label="Jenis Item" value={data.total_items} sub="dalam katalog logistik" accent="slate" icon={Package} />
         <StatCard testId="stat-safe-items" label="Aman" value={data.status_counts.aman} sub="di atas ambang minimum" accent="green" />
         <StatCard testId="stat-low-items" label="Menipis / Habis" value={low} sub="perlu tindak lanjut" accent={low ? "red" : "green"} icon={AlertTriangle} />
         <StatCard testId="stat-weekly-activity" label="Transaksi 7 Hari" value={data.weekly_activity.IN + data.weekly_activity.OUT + data.weekly_activity.ADJUSTMENT} sub={`${data.weekly_activity.IN} masuk · ${data.weekly_activity.OUT} salur · ${data.weekly_activity.ADJUSTMENT} koreksi`} accent="blue" icon={ClipboardCheck} />
@@ -105,9 +122,9 @@ export default function StockDashboard() {
                     <td className="text-slate-400 text-xs">{i.category}</td>
                     <td className="text-right num font-bold text-white" data-testid={`stock-qty-${i.id}`}>{fmtNum(i.currentStock)} <span className="text-slate-500 text-xs font-normal">{i.unit}</span></td>
                     <td className="text-right num text-slate-400">{fmtNum(i.minThreshold)}</td>
-                    <td><StatusBadge status={i.status} /></td>
+                    <td><StatusBadge status={i.status} testId={`stock-status-${i.id}`} /></td>
                     <td className="text-xs text-slate-500 whitespace-nowrap">{fmtDateTime(i.lastUpdated)}</td>
-                    <td className="text-right"><TrendingUp size={14} className="text-slate-500" /></td>
+                    <td className="text-right"><button data-testid={`stock-trend-button-${i.id}`} title={`Tren stok ${i.name}`} onClick={(e) => { e.stopPropagation(); setTrendItem(i.id); }} className="rounded-lg p-2 text-brand-blue hover:bg-blue-50 transition-colors"><TrendingUp size={15} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -115,7 +132,7 @@ export default function StockDashboard() {
           </div>
         </Panel>
 
-        <Panel title="Aktivitas Terbaru" subtitle="8 transaksi terakhir" testId="panel-recent" actions={<Link to="/app/riwayat" className="text-xs font-bold text-amber-brand hover:underline">Semua →</Link>}>
+        <Panel title="Aktivitas Terbaru" subtitle="8 transaksi terakhir" testId="panel-recent" actions={<Link to="/app/riwayat" data-testid="stock-view-all-history" className="text-xs font-bold text-amber-brand hover:underline">Semua →</Link>}>
           {data.recent_transactions.length === 0 ? <EmptyState text="Belum ada transaksi." /> : (
             <ul className="space-y-3">
               {data.recent_transactions.map((t) => (

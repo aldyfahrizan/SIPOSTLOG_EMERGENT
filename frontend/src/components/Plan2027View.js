@@ -16,7 +16,7 @@ export default function Plan2027View({ data }) {
         <StatCard testId="stat-2027-total" label="Item dalam RKA" value={data.total_items} sub="katalog logistik bencana" accent="slate" />
         <StatCard testId="stat-2027-rencana" label="Direncanakan" value={data.status_counts.rencana} sub="dianggarkan tahun 2027" accent="blue" />
         <StatCard testId="stat-2027-tidak" label="Tidak Dianggarkan" value={data.status_counts["tidak-dianggarkan"]} sub="tidak ada dalam RKA 2027" accent="slate" />
-        <StatCard testId="stat-2027-quantity" label="Total Kuantitas Rencana" value={fmtNum(data.total_planned_quantity)} sub="seluruh kategori" accent="amber" />
+        <StatCard testId="stat-2027-categories" label="Kategori Logistik" value={data.total_categories} sub="dalam katalog RKA" accent="amber" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -42,14 +42,15 @@ export default function Plan2027View({ data }) {
       <Panel className="mt-6" title="Rencana Pengadaan per Item" subtitle={`${data.items.length} item dalam katalog`} testId="panel-2027-items">
         <div className="overflow-x-auto scrollbar-thin -mx-2">
           <table className="tbl">
-            <thead><tr><th>Item</th><th>Kategori</th><th className="text-right">Kuantitas Rencana</th><th>Status</th></tr></thead>
+            <thead><tr><th>Item</th><th>Kategori</th><th className="text-right">Kuantitas Rencana</th><th className="text-right">Stok Riil 2027</th><th>Status</th></tr></thead>
             <tbody>
               {data.items.map((i) => (
                 <tr key={i.id} data-testid={`plan-2027-row-${i.id}`}>
                   <td><div className="font-semibold text-white">{i.name}</div><div className="text-[11px] text-slate-500 font-mono">{i.id}</div></td>
                   <td className="text-slate-400 text-xs">{i.category}</td>
                   <td className="text-right num font-bold text-white">{fmtNum(i.planQuantity)} <span className="text-slate-500 text-xs font-normal">{i.unit}</span></td>
-                  <td><StatusBadge status={i.status} /></td>
+                  <td className="text-right num" data-testid={`plan-2027-stock-${i.id}`}>{fmtNum(i.currentStock)} {i.unit}</td>
+                  <td><StatusBadge status={i.status} testId={`plan-2027-status-${i.id}`} /></td>
                 </tr>
               ))}
             </tbody>

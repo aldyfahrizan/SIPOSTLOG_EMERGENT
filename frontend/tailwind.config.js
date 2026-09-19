@@ -10,7 +10,8 @@ module.exports = {
       colors: {
         ink: { 950: "#0B1120", 900: "#0F172A", 800: "#1E293B", 700: "#334155", 600: "#475569" },
         amber: { brand: "#F59E0B" },
-        paper: "#F6F3EC",
+        paper: "#F8FAFC",
+        brand: { blue: "#1E3A8A", orange: "#C2410C" },
       },
       boxShadow: {
         glow: "0 0 0 1px rgba(245,158,11,0.35), 0 12px 40px -12px rgba(245,158,11,0.35)",

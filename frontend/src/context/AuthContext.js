@@ -28,8 +28,14 @@ export function AuthProvider({ children }) {
   }, [checkAuth]);
 
   const logout = useCallback(async () => {
-    try { await api.post("/auth/logout"); } catch (_) {}
+    await api.post("/auth/logout");
     setUser(null);
+  }, []);
+
+  const loginAdmin = useCallback(async (username, password) => {
+    const { data } = await api.post("/auth/admin/login", { username, password });
+    setUser(data);
+    return data;
   }, []);
 
   const login = useCallback(() => {
@@ -39,7 +45,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, login, isStaff: user && (user.role === "admin" || user.role === "petugas"), isAdmin: user?.role === "admin" }}>
+    <AuthContext.Provider value={{ user, setUser, loading, checkAuth, logout, login, loginAdmin, isStaff: user && (user.role === "admin" || user.role === "petugas"), isAdmin: user?.role === "admin" }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,20 +1,20 @@
-export function Logos({ size = 44, className = "" }) {
+export function Logos({ size = 44, className = "", testId = "brand-logos" }) {
   return (
-    <div className={`flex items-center gap-2 ${className}`} data-testid="brand-logos">
+    <div className={`flex shrink-0 items-center gap-2 ${className}`} data-testid={testId}>
       <img src="/logo/kab-banjar.png" alt="Lambang Kabupaten Banjar" style={{ height: size }} className="w-auto drop-shadow-sm" />
       <img src="/logo/bpbd-banjar.png" alt="Logo BPBD Kabupaten Banjar" style={{ height: size }} className="w-auto drop-shadow-sm" />
     </div>
   );
 }
 
-export function Brand({ dark = true, compact = false }) {
+export function Brand({ dark = false, compact = false, testId = "public-header-logo" }) {
   return (
-    <div className="flex items-center gap-3" data-testid="public-header-logo">
-      <Logos size={compact ? 36 : 44} />
+    <div className="flex min-w-0 items-center gap-3" data-testid={testId}>
+      <Logos size={compact ? 32 : 40} testId={`${testId}-logos`} />
       <div className="leading-tight">
-        <div className={`font-display font-extrabold tracking-tight ${compact ? "text-base" : "text-lg"} ${dark ? "text-white" : "text-ink-900"}`}>SIPOSTLOG</div>
+        <div className={`font-display font-extrabold ${compact ? "text-base" : "text-lg"} ${dark ? "text-white" : "text-brand-blue"}`}>SIPOSTLOG</div>
         {!compact && (
-          <div className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${dark ? "text-amber-brand" : "text-amber-600"}`}>BPBD Kabupaten Banjar</div>
+          <div className="text-[10px] font-semibold text-brand-orange">BPBD Kabupaten Banjar</div>
         )}
       </div>
     </div>

@@ -41,7 +41,7 @@ export default function DistributionDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger">
             <StatCard testId="dist-stat-total" label="Transaksi Penyaluran" value={fmtNum(data.total_transactions)} sub={`${data.range.start} s/d ${data.range.end}`} accent="amber" icon={Truck} />
             <StatCard testId="dist-stat-destinations" label="Tujuan" value={fmtNum(data.unique_destinations)} sub="posko / desa / kecamatan" accent="blue" icon={MapPin} />
-            <StatCard testId="dist-stat-items" label="Jenis Item Disalurkan" value={fmtNum(data.unique_items)} sub="dari 33 item" accent="green" icon={Boxes} />
+            <StatCard testId="dist-stat-items" label="Jenis Item Disalurkan" value={fmtNum(data.unique_items)} sub="dalam periode terpilih" accent="green" icon={Boxes} />
             <StatCard testId="dist-stat-incidents" label="Jenis Kejadian" value={fmtNum(data.per_incident.length)} sub={data.per_incident[0] ? `terbanyak: ${data.per_incident[0].incident_type}` : "—"} accent="red" icon={Flame} />
           </div>
 
@@ -61,7 +61,7 @@ export default function DistributionDashboard() {
             </Panel>
             <Panel title="Per Jenis Kejadian" subtitle="Proporsi transaksi" testId="panel-incidents">
               {data.per_incident.length === 0 ? <EmptyState text="Belum ada penyaluran." /> : (
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="h-44 w-44 shrink-0">
                     <ResponsiveContainer><PieChart><Pie data={data.per_incident} dataKey="count" nameKey="incident_type" innerRadius={48} outerRadius={70} paddingAngle={3} stroke="none">
                       {data.per_incident.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}</Pie><Tooltip contentStyle={TT} /></PieChart></ResponsiveContainer>

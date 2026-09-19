@@ -38,7 +38,7 @@ export default function UsersPage() {
 
   return (
     <div data-testid="users-page">
-      <PageHeader eyebrow="Administrasi" title="Kelola Pengguna" description="Akun Google yang pernah masuk. Berikan peran Petugas atau Admin, atau nonaktifkan akun. Akun baru berstatus Menunggu hingga disetujui." />
+      <PageHeader eyebrow="Administrasi" title="Kelola Pengguna" description="Akun dan hak akses SIPOSTLOG." />
       {pending > 0 && <div className="mb-5 flex items-center gap-2 rounded-lg border border-amber-brand/40 bg-amber-brand/10 p-3 text-sm text-amber-200" data-testid="pending-users-alert"><ShieldCheck size={16} /> {pending} akun menunggu persetujuan.</div>}
       <Panel testId="users-table-panel">
         {!users ? <Spinner /> : users.length === 0 ? <EmptyState text="Belum ada pengguna." /> : (

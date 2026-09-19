@@ -21,10 +21,10 @@ export default function StatCard({ label, value, sub, accent = "amber", icon: Ic
 
 export function PageHeader({ eyebrow, title, description, actions }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8 animate-rise">
+    <div className="flex flex-col gap-4 xl:flex-row xl:flex-wrap xl:items-end xl:justify-between mb-8 animate-rise">
       <div>
         {eyebrow && <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-brand mb-2">{eyebrow}</div>}
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">{title}</h1>
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-white" data-testid="internal-page-title">{title}</h1>
         {description && <p className="mt-2 max-w-2xl text-sm text-slate-400 leading-relaxed">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -34,9 +34,9 @@ export function PageHeader({ eyebrow, title, description, actions }) {
 
 export function Panel({ title, subtitle, children, className = "", actions, testId }) {
   return (
-    <section data-testid={testId} className={`dark-panel p-5 sm:p-6 ${className}`}>
+    <section data-testid={testId} className={`min-w-0 border-t border-slate-200 pt-5 sm:pt-6 ${className}`}>
       {(title || actions) && (
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             {title && <h3 className="text-base font-bold text-white">{title}</h3>}
             {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
