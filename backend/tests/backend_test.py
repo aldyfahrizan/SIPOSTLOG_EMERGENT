@@ -440,7 +440,7 @@ def test_pdf_export_pending_forbidden(s):
 # ---------- new: CORS regex ----------
 def test_cors_preflight_no_wildcard_with_credentials(s):
     # simulate preview subdomain
-    origin = "https://logistics-hub-1573.preview.emergentagent.com"
+    origin = "https://upload-backend.preview.emergentagent.com"
     r = s.options(f"{API}/auth/session", headers={
         "Origin": origin,
         "Access-Control-Request-Method": "POST",

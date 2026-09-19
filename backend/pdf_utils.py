@@ -8,7 +8,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
-LOGO_DIR = Path(__file__).parent.parent / "frontend" / "public" / "logo"
+LOGO_DIR = Path(__file__).parent / "assets" / "logo"
 AMBER = colors.HexColor("#F59E0B")
 INK = colors.HexColor("#0F172A")
 

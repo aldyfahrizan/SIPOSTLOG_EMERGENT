@@ -1,5 +1,7 @@
 import os
 import uuid
+import asyncio
+import hashlib
 import logging
 from datetime import datetime, timezone, timedelta, date as date_type
 from typing import Optional
@@ -16,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response as RawResponse, JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
+from pymongo.errors import BulkWriteError
 from pydantic import BaseModel, Field
 
 from auth import (
@@ -44,7 +47,25 @@ api = APIRouter(prefix="/api")
 WAREHOUSE = (ROLE_ADMIN, ROLE_PETUGAS)
 STAFF = (*WAREHOUSE, ROLE_OPNAME)
 ACTIVE_TX = {"cancelled": {"$ne": True}}
-ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ["CORS_ORIGINS"].split(",") if o.strip()]
+
+
+def configured_origins():
+    origins = {o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()}
+    for key in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+        if os.environ.get(key):
+            origins.add(f"https://{os.environ[key]}")
+    return sorted(origins)
+
+
+ALLOWED_ORIGINS = configured_origins()
+
+
+def origin_allowed(request: Request, origin: str) -> bool:
+    origin = origin.rstrip("/")
+    if origin in ALLOWED_ORIGINS:
+        return True
+    hosts = {request.headers.get("host", ""), request.headers.get("x-forwarded-host", "")}
+    return origin.split("://", 1)[-1] in hosts
 
 
 # ---------- helpers ----------
@@ -634,9 +655,10 @@ app.include_router(admin_actions_router)
 
 @app.middleware("http")
 async def protect_session_requests(request: Request, call_next):
+    await ensure_initialized()
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
-        if origin and origin.rstrip("/") not in ALLOWED_ORIGINS:
+        if origin and not origin_allowed(request, origin):
             logger.warning("Origin rejected: %r; configured: %r", origin, ALLOWED_ORIGINS)
             return JSONResponse(status_code=403, content={"detail": "Asal permintaan tidak diizinkan"})
     response = await call_next(request)
@@ -689,10 +711,18 @@ async def seed_2026_history():
     logger.info("Seeded 2026 realization history")
 
 
-@app.on_event("startup")
-async def startup():
-    if len(INITIAL_ITEMS) != EXPECTED_ITEM_COUNT:
-        raise RuntimeError(f"Data integrity violation: expected {EXPECTED_ITEM_COUNT} items, got {len(INITIAL_ITEMS)}")
+SCHEMA_VERSION = 1
+INIT_FINGERPRINT = hashlib.sha256(
+    f"{SCHEMA_VERSION}|{CATALOG_VERSION}|{os.environ['ADMIN_USERNAME']}|{os.environ['ADMIN_PASSWORD_HASH']}".encode()
+).hexdigest()
+_init_lock = asyncio.Lock()
+_init_done = False
+
+if len(INITIAL_ITEMS) != EXPECTED_ITEM_COUNT:
+    raise RuntimeError(f"Data integrity violation: expected {EXPECTED_ITEM_COUNT} items, got {len(INITIAL_ITEMS)}")
+
+
+async def initialize_database():
     await db.items.create_index("id", unique=True)
     await db.items.create_index("name_key", unique=True, sparse=True)
     await db.transactions.create_index([("occurred_at", -1)])
@@ -703,23 +733,42 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
     await seed_local_admin(db)
-    await reconcile_cancellations(db)
 
-    version_doc = await db.meta.find_one({"key": "catalog_version"})
-    if not version_doc or version_doc.get("value") != CATALOG_VERSION:
-        logger.info("Versi katalog diperbarui tanpa menghapus data operasional")
-
-    if not version_doc and await db.items.count_documents({}) == 0:
+    if not await db.meta.find_one({"key": "catalog_version"}) and await db.items.count_documents({}) == 0:
         ts = now_utc()
-        await db.items.insert_many([{**i, "lastUpdated": ts} for i in INITIAL_ITEMS])
-        logger.info("Seeded %d items", len(INITIAL_ITEMS))
-    count = await db.items.count_documents({})
-    logger.info("Katalog aktif: %d item", count)
+        try:
+            await db.items.insert_many([{**i, "lastUpdated": ts} for i in INITIAL_ITEMS], ordered=False)
+            logger.info("Seeded %d items", len(INITIAL_ITEMS))
+        except BulkWriteError:
+            logger.info("Katalog sudah diisi oleh proses lain")
 
-    if not await db.meta.find_one({"key": "sample_seeded"}) and await db.transactions.count_documents({}) == 0:
-        await seed_2026_history()
-        await db.meta.insert_one({"key": "sample_seeded", "at": now_utc()})
+    if await db.transactions.count_documents({}) == 0:
+        claim = await db.meta.update_one({"key": "sample_seeded"}, {"$setOnInsert": {"at": now_utc()}}, upsert=True)
+        if claim.upserted_id is not None:
+            await seed_2026_history()
     await db.meta.update_one({"key": "catalog_version"}, {"$set": {"value": CATALOG_VERSION}}, upsert=True)
+    await db.meta.update_one({"key": "init_fingerprint"}, {"$set": {"value": INIT_FINGERPRINT, "at": now_utc()}}, upsert=True)
+
+
+async def ensure_initialized():
+    """Idempotent, once-per-process bootstrap so serverless cold starts stay cheap."""
+    global _init_done
+    if _init_done:
+        return
+    async with _init_lock:
+        if _init_done:
+            return
+        stamp = await db.meta.find_one({"key": "init_fingerprint"}, {"_id": 0, "value": 1})
+        if not stamp or stamp.get("value") != INIT_FINGERPRINT:
+            await initialize_database()
+        await reconcile_cancellations(db)
+        _init_done = True
+        logger.info("Katalog aktif: %d item", await db.items.count_documents({}))
+
+
+@app.on_event("startup")
+async def startup():
+    await ensure_initialized()
 
 
 @app.on_event("shutdown")

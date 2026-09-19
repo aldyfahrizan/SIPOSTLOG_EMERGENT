@@ -2,7 +2,7 @@
 
 ## Regresi prioritas — penolakan Origin (19 September 2026)
 - Gejala yang direproduksi melalui browser: admin/admin mendapat 403 `Asal permintaan tidak diizinkan`.
-- Penyebab terkonfirmasi dalam log: proxy meneruskan Origin `https://logistics-hub-1573.cluster-12.preview.emergentcf.cloud`, sedangkan CORS_ORIGINS hanya memuat `https://logistics-hub-1573.preview.emergentagent.com`.
+- Penyebab terkonfirmasi dalam log: proxy meneruskan Origin `https://logistics-hub-1573.cluster-12.preview.emergentcf.cloud`, sedangkan CORS_ORIGINS hanya memuat `https://upload-backend.preview.emergentagent.com`.
 - Kedua alamat aplikasi kini ada pada allowlist eksplisit backend/.env. Middleware Origin dan CORSMiddleware memakai ALLOWED_ORIGINS yang sama; regex lintas proyek dihapus.
 - Verifikasi login admin/admin dari URL eksternal, /auth/me, reload dashboard, logout, dan penolakan cookie lama sesudah logout.
 - Verifikasi kedua Origin yang dikonfigurasi serta Origin asing melalui TestClient atau koneksi internal yang tidak menulis ulang header Origin. Pengujian browser/API utama tetap melalui REACT_APP_BACKEND_URL.
